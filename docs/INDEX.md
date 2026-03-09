@@ -36,6 +36,7 @@ If you are new to the repository, read in this order:
 | File | Purpose |
 | --- | --- |
 | `docs/project-status.md` | subsystem maturity snapshot, current risks, and latest implementation posture |
+| `docs/release-notes-2026-03-09.md` | draft release/update summary for the current repository import and cleanup wave |
 | `docs/todo-plan.md` | follow-up roadmap and prioritized tasks |
 
 ## Performance and Optimization
