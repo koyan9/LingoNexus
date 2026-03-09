@@ -137,7 +137,11 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
         if (worker == null) {
             return;
         }
-        if (isShutdown() || !worker.isAlive() || !worker.ping()) {
+        if (isShutdown()) {
+            discardWorker(worker);
+            return;
+        }
+        if (!worker.isAlive()) {
             healthCheckFailureCount.incrementAndGet();
             discardWorker(worker);
             return;

@@ -88,6 +88,34 @@ class ExternalProcessWorkerPoolFeatureTest {
         }
     }
 
+
+    @Test
+    @DisplayName("Should return healthy worker without extra ping")
+    void shouldReturnHealthyWorkerWithoutExtraPing() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            int pingCountAfterBorrow = worker.pingCount.get();
+
+            pool.returnWorker(borrowed);
+
+            assertEquals(pingCountAfterBorrow, worker.pingCount.get());
+            assertEquals(1, pool.getStatistics().getIdleWorkers());
+        } finally {
+            pool.shutdown();
+        }
+    }
+
     @Test
     @DisplayName("Should discard unhealthy idle worker and recover with replacement")
     void shouldDiscardUnhealthyIdleWorkerAndRecoverWithReplacement() throws Exception {
@@ -130,6 +158,7 @@ class ExternalProcessWorkerPoolFeatureTest {
 
         private boolean alive = true;
         private boolean pingResult = true;
+        private final AtomicInteger pingCount = new AtomicInteger(0);
         private ExternalProcessWorkerPool.ProtocolHandshakeSnapshot protocolHandshakeSnapshot =
                 ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.empty();
 
@@ -144,6 +173,7 @@ class ExternalProcessWorkerPoolFeatureTest {
 
         @Override
         public synchronized boolean ping() {
+            pingCount.incrementAndGet();
             return pingResult;
         }
 
