@@ -32,6 +32,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -75,25 +76,31 @@ public class LingoNexusExecutorImpl implements LingoNexusExecutor {
             logger.debug("Using default language: {}", language);
         }
 
+        if (context == null) {
+            context = ScriptContext.of(Collections.<String, Object>emptyMap());
+        }
+
         return executor.executeAsync(script, language, context);
     }
 
     @Override
     public List<ScriptResult> executeBatch(List<String> scripts, String language, ScriptContext context) {
         ensureActive();
+        Objects.requireNonNull(scripts, "scripts cannot be null");
         if (language == null || language.trim().isEmpty()) {
             language = config.getDefaultLanguage();
         }
+        if (context == null) {
+            context = ScriptContext.of(Collections.<String, Object>emptyMap());
+        }
+        if (scripts.isEmpty()) {
+            return Collections.emptyList();
+        }
 
         int id = 1;
-        List<ScriptTask> tasks = new ArrayList<ScriptTask>();
+        List<ScriptTask> tasks = new ArrayList<ScriptTask>(scripts.size());
         for (String script : scripts) {
-            tasks.add(ScriptTask.builder()
-                    .id(String.valueOf(id++))
-                    .script(script)
-                    .language(language)
-                    .context(context)
-                    .build());
+            tasks.add(ScriptTask.of(Integer.toString(id++), script, language, context));
         }
 
         return executor.executeBatch(tasks);

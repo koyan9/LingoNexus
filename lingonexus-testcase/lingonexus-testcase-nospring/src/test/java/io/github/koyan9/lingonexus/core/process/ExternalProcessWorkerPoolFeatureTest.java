@@ -20,6 +20,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -49,6 +50,39 @@ class ExternalProcessWorkerPoolFeatureTest {
             ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
             assertEquals(3L, statistics.getStartupFailureCount());
             assertEquals(0, statistics.getCreatedWorkers());
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+
+    @Test
+    @DisplayName("Should reuse worker handshake snapshot without rebuilding")
+    void shouldReuseWorkerHandshakeSnapshotWithoutRebuilding() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        worker.protocolHandshakeSnapshot = ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.of(
+                "1",
+                Collections.singletonList("JSON_FRAMED"),
+                Collections.singletonList("json-v1")
+        );
+
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            pool.returnWorker(borrowed);
+
+            ExternalProcessWorkerPool.ProtocolHandshakeSnapshot snapshot = pool.getProtocolHandshakeSnapshot();
+            assertSame(worker.protocolHandshakeSnapshot, snapshot);
+            assertEquals("1", snapshot.getProtocolVersion());
         } finally {
             pool.shutdown();
         }
@@ -96,6 +130,8 @@ class ExternalProcessWorkerPoolFeatureTest {
 
         private boolean alive = true;
         private boolean pingResult = true;
+        private ExternalProcessWorkerPool.ProtocolHandshakeSnapshot protocolHandshakeSnapshot =
+                ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.empty();
 
         private MutableWorker() {
             super();
@@ -109,6 +145,11 @@ class ExternalProcessWorkerPoolFeatureTest {
         @Override
         public synchronized boolean ping() {
             return pingResult;
+        }
+
+        @Override
+        ExternalProcessWorkerPool.ProtocolHandshakeSnapshot getProtocolHandshakeSnapshot() {
+            return protocolHandshakeSnapshot;
         }
 
         @Override

@@ -174,6 +174,39 @@ public class SpringBootBatchExecutionTest {
     }
 
     @Test
+    @DisplayName("Should execute batch with null context")
+    void shouldExecuteBatchWithNullContext() {
+        // Given
+        List<String> scripts = Arrays.asList(
+                "return 'batch-null-1'",
+                "return 'batch-null-2'"
+        );
+
+        // When
+        List<ScriptResult> results = facade.executeBatch(scripts, "groovy", null);
+
+        // Then
+        assertThat(results).hasSize(2);
+        assertThat(results).allMatch(ScriptResult::isSuccess);
+        assertThat(results.get(0).getValue()).isEqualTo("batch-null-1");
+        assertThat(results.get(1).getValue()).isEqualTo("batch-null-2");
+    }
+
+    @Test
+    @DisplayName("Should handle empty batch with null context")
+    void shouldHandleEmptyBatchWithNullContext() {
+        // Given
+        List<String> scripts = Collections.emptyList();
+
+        // When
+        List<ScriptResult> results = facade.executeBatch(scripts, "groovy", null);
+
+        // Then
+        assertThat(results).isEmpty();
+    }
+
+
+    @Test
     @DisplayName("Should execute batch with complex computations")
     void shouldExecuteBatchWithComplexComputations() {
         // Given

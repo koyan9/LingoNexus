@@ -42,6 +42,8 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class ExternalProcessExecutorRegistry {
 
+    private static final int SIGNATURE_CAPACITY = 32;
+    private static final int DESCRIPTOR_ENTRY_CAPACITY = 4;
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final LinkedHashMap<String, CachedExecutorEntry> EXECUTORS = new LinkedHashMap<String, CachedExecutorEntry>(16, 0.75f, true);
     private static final AtomicLong cacheHits = new AtomicLong(0);
@@ -126,7 +128,7 @@ public final class ExternalProcessExecutorRegistry {
     }
 
     private static String buildSignature(ExternalProcessExecutionRequest request) throws Exception {
-        Map<String, Object> signature = new LinkedHashMap<String, Object>();
+        Map<String, Object> signature = new LinkedHashMap<String, Object>(SIGNATURE_CAPACITY);
         signature.put("defaultLanguage", request.getDefaultLanguage());
         signature.put("cacheEnabled", request.isCacheEnabled());
         signature.put("cacheMaxSize", request.getCacheMaxSize());
@@ -161,8 +163,9 @@ public final class ExternalProcessExecutorRegistry {
     }
 
     private static LingoNexusExecutor createExecutor(ExternalProcessExecutionRequest request) {
-        List<SecurityPolicy> customPolicies = new ArrayList<SecurityPolicy>();
-        for (ExternalProcessExtensionDescriptor descriptor : defaultDescriptors(request.getCustomSecurityPolicies())) {
+        List<ExternalProcessExtensionDescriptor> customSecurityPolicyDescriptors = defaultDescriptors(request.getCustomSecurityPolicies());
+        List<SecurityPolicy> customPolicies = new ArrayList<SecurityPolicy>(customSecurityPolicyDescriptors.size());
+        for (ExternalProcessExtensionDescriptor descriptor : customSecurityPolicyDescriptors) {
             customPolicies.add(ExternalProcessExtensionSupport.instantiate(descriptor, SecurityPolicy.class));
         }
 
@@ -212,9 +215,13 @@ public final class ExternalProcessExecutorRegistry {
     }
 
     private static List<Map<String, Object>> normalizeDescriptors(List<ExternalProcessExtensionDescriptor> descriptors) {
+        if (descriptors == null || descriptors.isEmpty()) {
+            return Collections.emptyList();
+        }
+
         List<Map<String, Object>> normalized = new ArrayList<Map<String, Object>>(descriptors.size());
         for (ExternalProcessExtensionDescriptor descriptor : descriptors) {
-            Map<String, Object> item = new HashMap<String, Object>();
+            Map<String, Object> item = new HashMap<String, Object>(DESCRIPTOR_ENTRY_CAPACITY);
             item.put("className", descriptor.getClassName());
             item.put("descriptor", descriptor.getDescriptor());
             normalized.add(item);

@@ -189,12 +189,9 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
             if (worker == null) {
                 continue;
             }
-            if (worker.getProtocolVersion() != null) {
-                return new ProtocolHandshakeSnapshot(
-                        worker.getProtocolVersion(),
-                        worker.getSupportedTransportProtocolCapabilities(),
-                        worker.getSupportedTransportSerializerContractIds()
-                );
+            ProtocolHandshakeSnapshot snapshot = worker.getProtocolHandshakeSnapshot();
+            if (snapshot != null && !snapshot.isEmpty()) {
+                return snapshot;
             }
         }
         return ProtocolHandshakeSnapshot.empty();
@@ -246,6 +243,27 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
 
         public static ProtocolHandshakeSnapshot empty() {
             return EMPTY;
+        }
+
+        static ProtocolHandshakeSnapshot of(String protocolVersion,
+                                            List<String> supportedTransportProtocolCapabilities,
+                                            List<String> supportedTransportSerializerContractIds) {
+            if (protocolVersion == null
+                    && (supportedTransportProtocolCapabilities == null || supportedTransportProtocolCapabilities.isEmpty())
+                    && (supportedTransportSerializerContractIds == null || supportedTransportSerializerContractIds.isEmpty())) {
+                return EMPTY;
+            }
+            return new ProtocolHandshakeSnapshot(
+                    protocolVersion,
+                    supportedTransportProtocolCapabilities,
+                    supportedTransportSerializerContractIds
+            );
+        }
+
+        boolean isEmpty() {
+            return protocolVersion == null
+                    && supportedTransportProtocolCapabilities.isEmpty()
+                    && supportedTransportSerializerContractIds.isEmpty();
         }
 
         public String getProtocolVersion() {

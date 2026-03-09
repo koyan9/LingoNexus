@@ -64,6 +64,17 @@ public class ExecutionPreparationService {
         Map<String, Object> globalVariables = getGlobalVariablesSnapshot();
         ModuleSnapshot moduleSnapshot = includeModules ? getModuleSnapshot() : ModuleSnapshot.empty();
 
+        PreparedExecution fastPathExecution = tryPrepareFastPath(
+                requestContext,
+                includeModules,
+                requestVariables,
+                globalVariables,
+                moduleSnapshot
+        );
+        if (fastPathExecution != null) {
+            return fastPathExecution;
+        }
+
         Map<String, Object> executionVariables = new HashMap<String, Object>(
                 calculateInitialCapacity(
                         globalVariables.size(),
@@ -86,6 +97,40 @@ public class ExecutionPreparationService {
                 : null;
 
         return new PreparedExecution(executionVariables, modulesUsed, executionContext);
+    }
+
+    private PreparedExecution tryPrepareFastPath(ScriptContext requestContext,
+                                                 boolean includeModules,
+                                                 Map<String, Object> requestVariables,
+                                                 Map<String, Object> globalVariables,
+                                                 ModuleSnapshot moduleSnapshot) {
+        if (globalVariables.isEmpty() && moduleSnapshot.isEmpty()) {
+            Map<String, Object> executionVariables = requestVariables != null
+                    ? requestVariables
+                    : Collections.<String, Object>emptyMap();
+            ScriptContext executionContext = includeModules ? requestContext : null;
+            return new PreparedExecution(
+                    executionVariables,
+                    Collections.<String>emptyList(),
+                    executionContext
+            );
+        }
+
+        if (includeModules && globalVariables.isEmpty()
+                && (requestVariables == null || requestVariables.isEmpty())
+                && !moduleSnapshot.isEmpty()) {
+            ScriptContext executionContext = ScriptContext.of(
+                    moduleSnapshot.getModuleBindings(),
+                    requestContext.getMetadata()
+            );
+            return new PreparedExecution(
+                    executionContext.getVariables(),
+                    moduleSnapshot.getModuleNames(),
+                    executionContext
+            );
+        }
+
+        return null;
     }
 
     private Map<String, Object> getGlobalVariablesSnapshot() {
@@ -148,10 +193,10 @@ public class ExecutionPreparationService {
             if (moduleName == null || moduleName.trim().isEmpty()) {
                 continue;
             }
-            if (!moduleBindings.containsKey(moduleName)) {
+            Object previousModule = moduleBindings.put(moduleName, module);
+            if (previousModule == null) {
                 moduleNames.add(moduleName);
             }
-            moduleBindings.put(moduleName, module);
         }
 
         if (moduleBindings.isEmpty()) {

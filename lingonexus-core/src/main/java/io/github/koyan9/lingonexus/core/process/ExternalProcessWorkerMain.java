@@ -77,7 +77,7 @@ public final class ExternalProcessWorkerMain {
                     "FAILURE",
                     null,
                     e.getMessage(),
-                    new HashMap<String, Object>(),
+                    Collections.<String, Object>emptyMap(),
                     0L,
                     ExternalProcessExecutorRegistry.getStatistics()
             );
@@ -129,7 +129,7 @@ public final class ExternalProcessWorkerMain {
 
     private static ExternalProcessExecutionResponse executeRequest(ExternalProcessExecutionRequest request) {
         if (request.getRequestType() == ExternalProcessExecutionRequest.RequestType.HEALTHCHECK) {
-            return new ExternalProcessExecutionResponse(true, "SUCCESS", Boolean.TRUE, null, new HashMap<String, Object>(), 0L, ExternalProcessExecutorRegistry.getStatistics(), ExternalProcessProtocolCodec.getProtocolVersion(), ExternalProcessProtocolCodec.getSupportedTransportProtocolCapabilities(), ExternalProcessProtocolCodec.getSupportedTransportSerializerContractIds());
+            return new ExternalProcessExecutionResponse(true, "SUCCESS", Boolean.TRUE, null, Collections.<String, Object>emptyMap(), 0L, ExternalProcessExecutorRegistry.getStatistics(), ExternalProcessProtocolCodec.getProtocolVersion(), ExternalProcessProtocolCodec.getSupportedTransportProtocolCapabilities(), ExternalProcessProtocolCodec.getSupportedTransportSerializerContractIds());
         }
 
         try {
@@ -144,7 +144,7 @@ public final class ExternalProcessWorkerMain {
                 Object normalizedValue = JsonSafeValueNormalizer.normalizeForResponse(result.getValue());
                 Map<String, Object> normalizedMetadata = result.getMetadata() != null
                         ? JsonSafeValueNormalizer.normalizeMap(result.getMetadata(), "$.metadata", true)
-                        : new HashMap<String, Object>();
+                        : Collections.<String, Object>emptyMap();
 
                 return new ExternalProcessExecutionResponse(
                         result.isSuccess(),

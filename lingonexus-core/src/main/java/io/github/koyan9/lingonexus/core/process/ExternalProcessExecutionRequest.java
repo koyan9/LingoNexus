@@ -37,6 +37,45 @@ import java.util.Set;
 public class ExternalProcessExecutionRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;
+    private static final ExternalProcessExecutionRequest HEALTH_CHECK_REQUEST = new ExternalProcessExecutionRequest(
+            RequestType.HEALTHCHECK,
+            null,
+            null,
+            null,
+            false,
+            0L,
+            0L,
+            0L,
+            1,
+            0L,
+            false,
+            0,
+            false,
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            java.util.Collections.<SandboxHostAccessMode>emptySet(),
+            java.util.Collections.<SandboxHostRestrictionMode>emptySet(),
+            java.util.Collections.<SandboxHostRestrictionFlag>emptySet(),
+            java.util.Collections.<SandboxResultTransportMode>emptySet(),
+            java.util.Collections.<SandboxTransportSerializerMode>emptySet(),
+            java.util.Collections.<SandboxTransportPayloadProfile>emptySet(),
+            java.util.Collections.<SandboxTransportProtocolCapability>emptySet(),
+            java.util.Collections.<String>emptySet(),
+            false,
+            false,
+            false,
+            false,
+            ResultMetadataProfile.FULL,
+            java.util.Collections.<ResultMetadataCategory>emptySet(),
+            java.util.Collections.<ExternalProcessExtensionDescriptor>emptyList(),
+            java.util.Collections.<ExternalProcessExtensionDescriptor>emptyList(),
+            java.util.Collections.<String, Object>emptyMap(),
+            java.util.Collections.<String, Object>emptyMap()
+    );
 
     public enum RequestType {
         EXECUTE,
@@ -175,45 +214,7 @@ public class ExternalProcessExecutionRequest implements Serializable {
     }
 
     public static ExternalProcessExecutionRequest healthCheck() {
-        return new ExternalProcessExecutionRequest(
-                RequestType.HEALTHCHECK,
-                null,
-                null,
-                null,
-                false,
-                0L,
-                0L,
-                0L,
-                1,
-                0L,
-                false,
-                0,
-                false,
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                java.util.Collections.<SandboxHostAccessMode>emptySet(),
-                java.util.Collections.<SandboxHostRestrictionMode>emptySet(),
-                java.util.Collections.<SandboxHostRestrictionFlag>emptySet(),
-                java.util.Collections.<SandboxResultTransportMode>emptySet(),
-                java.util.Collections.<SandboxTransportSerializerMode>emptySet(),
-                java.util.Collections.<SandboxTransportPayloadProfile>emptySet(),
-                java.util.Collections.<SandboxTransportProtocolCapability>emptySet(),
-                java.util.Collections.<String>emptySet(),
-                false,
-                false,
-                false,
-                false,
-                ResultMetadataProfile.FULL,
-                java.util.Collections.<ResultMetadataCategory>emptySet(),
-                java.util.Collections.<ExternalProcessExtensionDescriptor>emptyList(),
-                java.util.Collections.<ExternalProcessExtensionDescriptor>emptyList(),
-                java.util.Collections.<String, Object>emptyMap(),
-                java.util.Collections.<String, Object>emptyMap()
-        );
+        return HEALTH_CHECK_REQUEST;
     }
 
     public RequestType getRequestType() {

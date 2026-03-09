@@ -121,26 +121,31 @@ public class ExternalProcessExecutionRequestFactory {
     }
 
     private Map<String, Object> createRequestMetadata(ScriptContext context) {
-        if (context == null || context.getMetadata() == null || context.getMetadata().isEmpty()) {
+        Map<String, Object> contextMetadata = context != null ? context.getMetadata() : null;
+        if (contextMetadata == null || contextMetadata.isEmpty()) {
             return Collections.emptyMap();
         }
-        Map<String, Object> metadata = new HashMap<String, Object>(context.getMetadata());
-        if (!metadata.containsKey(MetadataKeys.RESULT_METADATA_CATEGORIES)) {
-            Object policyOverride = metadata.get(MetadataKeys.RESULT_METADATA_POLICY);
-            if (policyOverride != null) {
-                java.util.Set<ResultMetadataCategory> resolved = ResultMetadataPolicySupport.resolveNamedPolicy(
-                        String.valueOf(policyOverride),
-                        config.getResultMetadataPolicyTemplates()
-                );
-                if (resolved != null) {
-                    List<String> categories = new ArrayList<String>(resolved.size());
-                    for (ResultMetadataCategory category : resolved) {
-                        categories.add(category.name());
-                    }
-                    metadata.put(MetadataKeys.RESULT_METADATA_CATEGORIES, categories);
-                }
-            }
+
+        Object categoriesOverride = contextMetadata.get(MetadataKeys.RESULT_METADATA_CATEGORIES);
+        if (categoriesOverride != null) {
+            return normalizeRequestPayload(contextMetadata, "$.metadata");
         }
+
+        Object policyOverride = contextMetadata.get(MetadataKeys.RESULT_METADATA_POLICY);
+        if (policyOverride == null) {
+            return normalizeRequestPayload(contextMetadata, "$.metadata");
+        }
+
+        java.util.Set<ResultMetadataCategory> resolved = ResultMetadataPolicySupport.resolveNamedPolicy(
+                String.valueOf(policyOverride),
+                config.getResultMetadataPolicyTemplates()
+        );
+        if (resolved == null) {
+            return normalizeRequestPayload(contextMetadata, "$.metadata");
+        }
+
+        Map<String, Object> metadata = new HashMap<String, Object>(contextMetadata);
+        metadata.put(MetadataKeys.RESULT_METADATA_CATEGORIES, toCategoryNames(resolved));
         return normalizeRequestPayload(metadata, "$.metadata");
     }
 
@@ -198,7 +203,7 @@ public class ExternalProcessExecutionRequestFactory {
             return Collections.emptyList();
         }
 
-        List<ExternalProcessExtensionDescriptor> result = new ArrayList<ExternalProcessExtensionDescriptor>();
+        List<ExternalProcessExtensionDescriptor> result = new ArrayList<ExternalProcessExtensionDescriptor>(securityPolicies.size());
         for (SecurityPolicy securityPolicy : securityPolicies) {
             if (securityPolicy == null || builtInPolicyClasses.contains(securityPolicy.getClass().getName())) {
                 continue;
@@ -217,7 +222,7 @@ public class ExternalProcessExecutionRequestFactory {
             return Collections.emptyList();
         }
 
-        List<ExternalProcessExtensionDescriptor> result = new ArrayList<ExternalProcessExtensionDescriptor>();
+        List<ExternalProcessExtensionDescriptor> result = new ArrayList<ExternalProcessExtensionDescriptor>(modules.size());
         for (ScriptModule module : modules) {
             if (module == null) {
                 continue;
@@ -231,9 +236,18 @@ public class ExternalProcessExecutionRequestFactory {
         return Collections.unmodifiableList(result);
     }
 
+    private List<String> toCategoryNames(java.util.Set<ResultMetadataCategory> categories) {
+        List<String> result = new ArrayList<String>(categories.size());
+        for (ResultMetadataCategory category : categories) {
+            result.add(category.name());
+        }
+        return result;
+    }
+
     private Set<String> resolveBuiltInPolicyClasses() {
-        Set<String> result = new HashSet<String>();
-        for (BuiltInPolicy builtInPolicy : BuiltInPolicy.values()) {
+        BuiltInPolicy[] builtInPolicies = BuiltInPolicy.values();
+        Set<String> result = new HashSet<String>(builtInPolicies.length);
+        for (BuiltInPolicy builtInPolicy : builtInPolicies) {
             result.add(builtInPolicy.getSecurityPolicy().getClass().getName());
         }
         return Collections.unmodifiableSet(result);

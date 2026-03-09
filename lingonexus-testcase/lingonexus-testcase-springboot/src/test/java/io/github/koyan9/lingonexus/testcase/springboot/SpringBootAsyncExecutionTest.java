@@ -71,6 +71,22 @@ public class SpringBootAsyncExecutionTest {
     }
 
     @Test
+    @DisplayName("Should execute async script with null context")
+    void shouldExecuteAsyncScriptWithNullContext() throws Exception {
+        // Given
+        String script = "return 'async-null-context'";
+
+        // When
+        CompletableFuture<ScriptResult> future = facade.executeAsync(script, "groovy", null);
+        ScriptResult result = future.get(5, TimeUnit.SECONDS);
+
+        // Then
+        assertThat(result.isSuccess()).isTrue();
+        assertThat(result.getValue()).isEqualTo("async-null-context");
+    }
+
+
+    @Test
     @DisplayName("Should execute script with variables asynchronously")
     void shouldExecuteScriptWithVariablesAsync() throws Exception {
         // Given

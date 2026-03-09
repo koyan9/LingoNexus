@@ -112,6 +112,8 @@ The script uses a project-local Maven repository at `.verified-m2-repo` to avoid
 
 When a dedicated repository path is used, the script now also installs the root/parent POMs (`lingonexus`, `lingonexus-script`, `lingonexus-testcase`) and the downstream dependency modules that testcase compilation needs, so the isolated repository can be bootstrapped from an empty state.
 
+In dedicated-repository mode, installation checks now only look at the active dedicated repo path instead of falling back to other local repositories. This avoids false "already installed" skips during cold-start verification.
+
 The script also supports repairing incomplete jars on this machine by repacking them directly from `target/classes` when the jar contains fewer `.class` files than the compiled output directory.
 
 Optional flags:

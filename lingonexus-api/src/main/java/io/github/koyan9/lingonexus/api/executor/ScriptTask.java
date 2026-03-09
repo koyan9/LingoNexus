@@ -59,6 +59,15 @@ public class ScriptTask {
         return new Builder();
     }
 
+    public static ScriptTask of(String id, String script, String language, ScriptContext context) {
+        return builder()
+                .id(id)
+                .script(script)
+                .language(language)
+                .context(context)
+                .build();
+    }
+
     public static class Builder {
         private String script;
         private String language;

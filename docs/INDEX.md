@@ -36,6 +36,8 @@ If you are new to the repository, read in this order:
 | File | Purpose |
 | --- | --- |
 | `docs/project-status.md` | subsystem maturity snapshot, current risks, and latest implementation posture |
+| `docs/internal-assessment-2026-03-09.md` | internal assessment of current product fit, technical maturity, risks, and next actions |
+| `docs/milestone-v0.1.1.md` | issue-ready milestone checklist for the `v0.1.1` patch release |
 | `docs/release-notes-2026-03-09.md` | draft release/update summary for the current repository import and cleanup wave |
 | `docs/todo-plan.md` | follow-up roadmap and prioritized tasks |
 

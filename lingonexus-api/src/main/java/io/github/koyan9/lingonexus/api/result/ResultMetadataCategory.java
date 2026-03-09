@@ -31,13 +31,19 @@ public enum ResultMetadataCategory {
     SECURITY,
     ERROR_DIAGNOSTICS;
 
+    private static final Set<ResultMetadataCategory> BASIC_CATEGORIES = Collections.emptySet();
+    private static final Set<ResultMetadataCategory> TIMING_CATEGORIES =
+            Collections.unmodifiableSet(EnumSet.of(TIMING));
+    private static final Set<ResultMetadataCategory> FULL_CATEGORIES =
+            Collections.unmodifiableSet(EnumSet.allOf(ResultMetadataCategory.class));
+
     public static Set<ResultMetadataCategory> forProfile(ResultMetadataProfile profile) {
         if (profile == null || profile == ResultMetadataProfile.BASIC) {
-            return Collections.emptySet();
+            return BASIC_CATEGORIES;
         }
         if (profile == ResultMetadataProfile.TIMING) {
-            return Collections.unmodifiableSet(EnumSet.of(TIMING));
+            return TIMING_CATEGORIES;
         }
-        return Collections.unmodifiableSet(EnumSet.allOf(ResultMetadataCategory.class));
+        return FULL_CATEGORIES;
     }
 }

@@ -46,6 +46,8 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
     private final BufferedInputStream responseStream;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private final AtomicLong lastReturnedAtNanos = new AtomicLong(System.nanoTime());
+    private volatile ExternalProcessWorkerPool.ProtocolHandshakeSnapshot protocolHandshakeSnapshot =
+            ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.empty();
     private volatile String protocolVersion;
     private volatile List<String> supportedTransportProtocolCapabilities = Collections.emptyList();
     private volatile List<String> supportedTransportSerializerContractIds = Collections.emptyList();
@@ -137,6 +139,10 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
         return supportedTransportSerializerContractIds;
     }
 
+    ExternalProcessWorkerPool.ProtocolHandshakeSnapshot getProtocolHandshakeSnapshot() {
+        return protocolHandshakeSnapshot;
+    }
+
     public synchronized boolean ping() {
         if (!isAlive()) {
             return false;
@@ -147,6 +153,11 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
                 protocolVersion = response.getProtocolVersion();
                 supportedTransportProtocolCapabilities = response.getSupportedTransportProtocolCapabilities() != null ? response.getSupportedTransportProtocolCapabilities() : Collections.<String>emptyList();
                 supportedTransportSerializerContractIds = response.getSupportedTransportSerializerContractIds() != null ? response.getSupportedTransportSerializerContractIds() : Collections.<String>emptyList();
+                protocolHandshakeSnapshot = ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.of(
+                        protocolVersion,
+                        supportedTransportProtocolCapabilities,
+                        supportedTransportSerializerContractIds
+                );
                 return true;
             }
             return false;

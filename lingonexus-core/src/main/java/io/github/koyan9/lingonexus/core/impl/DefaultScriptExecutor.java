@@ -120,7 +120,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     public ScriptResult execute(String script, String language, ScriptContext context) {
         ensureActive();
         long requestStartNanos = System.nanoTime();
-        Map<String, Object> resultMetadata = new HashMap<String, Object>();
+        Map<String, Object> resultMetadata = null;
         java.util.Set<ResultMetadataCategory> resultMetadataCategories = config.getResultMetadataCategories();
 
         try {
@@ -187,17 +187,29 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             long elapsedTime = nanosToMillis(System.nanoTime() - requestStartNanos);
             logger.error("Script execution failed: language={}, error={}", language, e.getMessage(), e);
 
+            if (resultMetadata == null) {
+                resultMetadata = createInitialResultMetadata(
+                        language,
+                        config.getSandboxConfig().getIsolationMode().name(),
+                        resultMetadataCategories
+                );
+            }
+
             resultMetadata.put(ResultMetadataKeys.ERROR_TYPE, e.getClass().getSimpleName());
             resultMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, e.getMessage());
+            boolean requiresMetadataFiltering = false;
             if (e instanceof ExternalProcessCompatibilityException) {
                 populateExternalProcessCompatibilityMetadata(
                         resultMetadata,
                         (ExternalProcessCompatibilityException) e
                 );
+                requiresMetadataFiltering = true;
             }
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.EXECUTION_TIME, elapsedTime);
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, elapsedTime);
-            stripResultMetadataForCategories(resultMetadata, resultMetadataCategories);
+            if (requiresMetadataFiltering) {
+                stripResultMetadataForCategories(resultMetadata, resultMetadataCategories);
+            }
 
             ExecutionStatus status = determineExecutionStatus(e);
             statisticsCollector.record(language, false, extractCacheHit(resultMetadata), elapsedTime);
@@ -237,7 +249,6 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 errorMetadata.put(ResultMetadataKeys.ERROR_TYPE, e.getClass().getSimpleName());
                 errorMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, e.getMessage());
                 errorMetadata.put("async", true);
-                stripResultMetadataForCategories(errorMetadata, resultMetadataCategories);
 
                 return ScriptResult.of(status, null, e, executionTime, errorMetadata);
             }
@@ -247,10 +258,15 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     @Override
     public List<ScriptResult> executeBatch(List<ScriptTask> tasks) {
         ensureActive();
+        Objects.requireNonNull(tasks, "tasks cannot be null");
         logger.debug("Executing batch of {} scripts", tasks.size());
 
-        List<ScriptResult> results = new ArrayList<ScriptResult>();
-        List<Future<ScriptResult>> futures = new ArrayList<Future<ScriptResult>>();
+        if (tasks.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<ScriptResult> results = new ArrayList<ScriptResult>(tasks.size());
+        List<Future<ScriptResult>> futures = new ArrayList<Future<ScriptResult>>(tasks.size());
 
         for (final ScriptTask task : tasks) {
             Future<ScriptResult> future = executorService.submit(() ->
@@ -444,7 +460,6 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 executionResult.getWallTimeMs(),
                 executionResult.getTotalTimeMs()
         );
-        stripResultMetadataForCategories(resultMetadata, resultMetadataCategories);
         return ScriptResult.success(executionResult.getValue(), executionResult.getTotalTimeMs(), resultMetadata);
     }
 
@@ -645,10 +660,13 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     private ScriptResult finalizeExternalProcessResult(ScriptResult processResult, Map<String, Object> resultMetadata,
                                                        long requestStartNanos,
                                                        java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        Map<String, Object> externalMetadata = processResult.getMetadata() != null
-                ? new HashMap<String, Object>(processResult.getMetadata())
-                : new HashMap<String, Object>();
-        externalMetadata.putAll(resultMetadata);
+        Map<String, Object> processMetadata = processResult.getMetadata();
+        Map<String, Object> externalMetadata = processMetadata != null
+                ? processMetadata
+                : new HashMap<String, Object>(resolveMergedResultMetadataCapacity(resultMetadata, null));
+        if (resultMetadata != null && !resultMetadata.isEmpty()) {
+            externalMetadata.putAll(resultMetadata);
+        }
         externalMetadata.put(ResultMetadataKeys.ISOLATION_MODE, ExecutionIsolationMode.EXTERNAL_PROCESS.name());
         putDiagnosticResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_ID, Thread.currentThread().getId());
         putDiagnosticResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_NAME, Thread.currentThread().getName());
@@ -656,8 +674,6 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         long totalTime = nanosToMillis(System.nanoTime() - requestStartNanos);
         putTimingResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, totalTime);
         putTimingResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataKeys.WALL_TIME, totalTime);
-
-        stripResultMetadataForCategories(externalMetadata, resultMetadataCategories);
 
         if (processResult.isSuccess()) {
             logSuccessfulExecution(
@@ -677,6 +693,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
         externalMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, processResult.getErrorMessage());
         externalMetadata.putIfAbsent(ResultMetadataKeys.ERROR_TYPE, processResult.getStatus().name());
+        stripResultMetadataForCategories(externalMetadata, resultMetadataCategories);
         return ScriptResult.of(
                 processResult.getStatus(),
                 null,
@@ -751,7 +768,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
     private Map<String, Object> createInitialResultMetadata(String language, String isolationMode,
                                                             java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        Map<String, Object> resultMetadata = new HashMap<String, Object>(resultMetadataCategories.size() >= 3 ? 16 : 8);
+        Map<String, Object> resultMetadata = new HashMap<String, Object>(resolveInitialResultMetadataCapacity(resultMetadataCategories));
         resultMetadata.put(ResultMetadataKeys.SCRIPT_ENGINE, language);
         resultMetadata.put(ResultMetadataKeys.ISOLATION_MODE, isolationMode);
         putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_ID, Thread.currentThread().getId());
@@ -760,46 +777,53 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private java.util.Set<ResultMetadataCategory> resolveResultMetadataCategories(ScriptContext context) {
-        if (context != null && context.getMetadata() != null) {
-            Object categoriesOverride = context.getMetadata().get(MetadataKeys.RESULT_METADATA_CATEGORIES);
-            java.util.Set<ResultMetadataCategory> parsedCategories = parseResultMetadataCategories(categoriesOverride);
-            if (parsedCategories != null) {
-                return parsedCategories;
+        Map<String, Object> contextMetadata = context != null ? context.getMetadata() : null;
+        if (contextMetadata == null || contextMetadata.isEmpty()) {
+            return config.getResultMetadataCategories();
+        }
+
+        Object categoriesOverride = contextMetadata.get(MetadataKeys.RESULT_METADATA_CATEGORIES);
+        java.util.Set<ResultMetadataCategory> parsedCategories = parseResultMetadataCategories(categoriesOverride);
+        if (parsedCategories != null) {
+            return parsedCategories;
+        }
+
+        Object policyOverride = contextMetadata.get(MetadataKeys.RESULT_METADATA_POLICY);
+        if (policyOverride instanceof ResultMetadataPolicy) {
+            return ((ResultMetadataPolicy) policyOverride).getCategories();
+        }
+        if (policyOverride != null) {
+            String policyText = String.valueOf(policyOverride);
+            ResultMetadataPolicy parsedPolicy = ResultMetadataPolicy.fromString(policyText);
+            if (parsedPolicy != null) {
+                return parsedPolicy.getCategories();
             }
-            Object policyOverride = context.getMetadata().get(MetadataKeys.RESULT_METADATA_POLICY);
-            if (policyOverride instanceof ResultMetadataPolicy) {
-                return ((ResultMetadataPolicy) policyOverride).getCategories();
+            java.util.Set<ResultMetadataCategory> resolvedNamedPolicy = ResultMetadataPolicySupport.resolveNamedPolicy(
+                    policyText,
+                    config.getResultMetadataPolicyTemplates()
+            );
+            if (resolvedNamedPolicy != null) {
+                return resolvedNamedPolicy;
             }
-            if (policyOverride != null) {
-                ResultMetadataPolicy parsedPolicy = ResultMetadataPolicy.fromString(String.valueOf(policyOverride));
-                if (parsedPolicy != null) {
-                    return parsedPolicy.getCategories();
-                }
-                java.util.Set<ResultMetadataCategory> resolvedNamedPolicy = ResultMetadataPolicySupport.resolveNamedPolicy(
-                        String.valueOf(policyOverride),
-                        config.getResultMetadataPolicyTemplates()
-                );
-                if (resolvedNamedPolicy != null) {
-                    return resolvedNamedPolicy;
-                }
+        }
+
+        Object profileOverride = contextMetadata.get(MetadataKeys.RESULT_METADATA_PROFILE);
+        if (profileOverride instanceof ResultMetadataProfile) {
+            return ResultMetadataCategory.forProfile((ResultMetadataProfile) profileOverride);
+        }
+        if (profileOverride != null) {
+            ResultMetadataProfile parsedProfile = ResultMetadataProfile.fromString(String.valueOf(profileOverride));
+            if (parsedProfile != null) {
+                return ResultMetadataCategory.forProfile(parsedProfile);
             }
-            Object profileOverride = context.getMetadata().get(MetadataKeys.RESULT_METADATA_PROFILE);
-            if (profileOverride instanceof ResultMetadataProfile) {
-                return ResultMetadataCategory.forProfile((ResultMetadataProfile) profileOverride);
-            }
-            if (profileOverride != null) {
-                ResultMetadataProfile parsedProfile = ResultMetadataProfile.fromString(String.valueOf(profileOverride));
-                if (parsedProfile != null) {
-                    return ResultMetadataCategory.forProfile(parsedProfile);
-                }
-            }
-            Object override = context.getMetadata().get(MetadataKeys.DETAILED_RESULT_METADATA_ENABLED);
-            if (override instanceof Boolean) {
-                return ResultMetadataCategory.forProfile(ResultMetadataProfile.fromDetailedEnabled((Boolean) override));
-            }
-            if (override != null) {
-                return ResultMetadataCategory.forProfile(ResultMetadataProfile.fromDetailedEnabled(Boolean.parseBoolean(String.valueOf(override))));
-            }
+        }
+
+        Object override = contextMetadata.get(MetadataKeys.DETAILED_RESULT_METADATA_ENABLED);
+        if (override instanceof Boolean) {
+            return ResultMetadataCategory.forProfile(ResultMetadataProfile.fromDetailedEnabled((Boolean) override));
+        }
+        if (override != null) {
+            return ResultMetadataCategory.forProfile(ResultMetadataProfile.fromDetailedEnabled(Boolean.parseBoolean(String.valueOf(override))));
         }
         return config.getResultMetadataCategories();
     }
@@ -850,6 +874,27 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         if (resultMetadataCategories.contains(category)) {
             resultMetadata.put(key, value);
         }
+    }
+
+    private int resolveInitialResultMetadataCapacity(java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+        if (resultMetadataCategories == null || resultMetadataCategories.isEmpty()) {
+            return 4;
+        }
+        if (resultMetadataCategories.size() >= 3) {
+            return 16;
+        }
+        return 8;
+    }
+
+    private int resolveMergedResultMetadataCapacity(Map<String, Object> baseMetadata,
+                                                    Map<String, Object> processMetadata) {
+        int baseSize = baseMetadata != null ? baseMetadata.size() : 0;
+        int processSize = processMetadata != null ? processMetadata.size() : 0;
+        int expectedSize = baseSize + processSize + 4;
+        if (expectedSize <= 0) {
+            return 8;
+        }
+        return (int) ((expectedSize / 0.75f) + 1.0f);
     }
 
     private void stripResultMetadataForCategories(Map<String, Object> metadata, java.util.Set<ResultMetadataCategory> resultMetadataCategories) {

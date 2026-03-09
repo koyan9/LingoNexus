@@ -25,9 +25,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,6 +76,55 @@ class ExecutionPreparationServiceFeatureTest {
         assertEquals("request-value", execution.getExecutionVariables().get("alpha"));
         assertEquals(1, execution.getModulesUsed().size());
         assertTrue(execution.getModulesUsed().contains("alpha"));
+    }
+
+    @Test
+    @DisplayName("Should reuse request context for in-process execution when no merge is needed")
+    void shouldReuseRequestContextForInProcessExecutionWhenNoMergeIsNeeded() {
+        ExecutionPreparationService service = new ExecutionPreparationService(null, null);
+        Map<String, Object> variables = new HashMap<String, Object>();
+        variables.put("value", 42);
+        ScriptContext requestContext = ScriptContext.of(variables);
+
+        PreparedExecution execution = service.prepareForInProcessExecution(requestContext);
+
+        assertSame(requestContext, execution.getExecutionContext());
+        assertSame(requestContext.getVariables(), execution.getExecutionVariables());
+        assertTrue(execution.getModulesUsed().isEmpty());
+    }
+
+
+    @Test
+    @DisplayName("Should reuse execution context variables for module-only in-process execution")
+    void shouldReuseExecutionContextVariablesForModuleOnlyInProcessExecution() {
+        DefaultModuleRegistry moduleRegistry = new DefaultModuleRegistry();
+        moduleRegistry.registerModule(new TestModule("alpha"));
+
+        ExecutionPreparationService service = new ExecutionPreparationService(null, moduleRegistry);
+        ScriptContext requestContext = ScriptContext.of(Collections.<String, Object>emptyMap());
+
+        PreparedExecution execution = service.prepareForInProcessExecution(requestContext);
+
+        assertNotSame(requestContext, execution.getExecutionContext());
+        assertSame(execution.getExecutionContext().getVariables(), execution.getExecutionVariables());
+        assertEquals(1, execution.getModulesUsed().size());
+        assertTrue(execution.getModulesUsed().contains("alpha"));
+        assertTrue(execution.getExecutionVariables().containsKey("alpha"));
+    }
+
+    @Test
+    @DisplayName("Should reuse request variables for external-process execution when no merge is needed")
+    void shouldReuseRequestVariablesForExternalProcessExecutionWhenNoMergeIsNeeded() {
+        ExecutionPreparationService service = new ExecutionPreparationService(null, null);
+        Map<String, Object> variables = new HashMap<String, Object>();
+        variables.put("value", 42);
+        ScriptContext requestContext = ScriptContext.of(variables);
+
+        PreparedExecution execution = service.prepareForExternalProcess(requestContext);
+
+        assertSame(requestContext.getVariables(), execution.getExecutionVariables());
+        assertTrue(execution.getModulesUsed().isEmpty());
+        assertNull(execution.getExecutionContext());
     }
 
     private static class TestModule implements ScriptModule {

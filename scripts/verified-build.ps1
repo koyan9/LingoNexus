@@ -400,6 +400,13 @@ function Get-RepositoryCandidates {
     return $candidates | Where-Object { $_ } | Select-Object -Unique
 }
 
+function Get-InstallationCheckRepositoryCandidates {
+    if (-not [string]::IsNullOrWhiteSpace($MavenRepoPath)) {
+        return @($MavenRepoPath)
+    }
+    return @(Get-RepositoryCandidates)
+}
+
 function Test-ArtifactInstalled {
     param(
         [Parameter(Mandatory = $true)]
@@ -407,7 +414,7 @@ function Test-ArtifactInstalled {
     )
 
     $version = Get-ProjectRevision
-    foreach ($repo in Get-RepositoryCandidates) {
+    foreach ($repo in Get-InstallationCheckRepositoryCandidates) {
         if (-not (Test-Path $repo)) {
             continue
         }
@@ -428,7 +435,7 @@ function Test-PomInstalled {
     )
 
     $version = Get-ProjectRevision
-    foreach ($repo in Get-RepositoryCandidates) {
+    foreach ($repo in Get-InstallationCheckRepositoryCandidates) {
         if (-not (Test-Path $repo)) {
             continue
         }

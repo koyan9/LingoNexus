@@ -37,6 +37,16 @@ import java.util.Map;
 public final class ExternalProcessProtocolCodec {
 
     private static final String PROTOCOL_VERSION = "1";
+    private static final int REQUEST_PAYLOAD_CAPACITY = 48;
+    private static final int RESPONSE_PAYLOAD_CAPACITY = 16;
+    private static final int DESCRIPTOR_PAYLOAD_CAPACITY = 4;
+    private static final java.util.List<String> SUPPORTED_TRANSPORT_PROTOCOL_CAPABILITIES = java.util.Collections.unmodifiableList(
+            java.util.Arrays.asList(
+                    io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.JSON_FRAMED.name(),
+                    io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.CUSTOM_SERIALIZER_CONTRACT.name()
+            )
+    );
+    private static final java.util.List<String> SUPPORTED_TRANSPORT_SERIALIZER_CONTRACT_IDS = java.util.Collections.emptyList();
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<Map<String, Object>>() { };
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -44,7 +54,7 @@ public final class ExternalProcessProtocolCodec {
     }
 
     public static void writeRequest(OutputStream outputStream, ExternalProcessExecutionRequest request) throws IOException {
-        Map<String, Object> payload = new HashMap<String, Object>();
+        Map<String, Object> payload = new HashMap<String, Object>(REQUEST_PAYLOAD_CAPACITY);
         payload.put("protocolVersion", PROTOCOL_VERSION);
         payload.put("requestType", request.getRequestType().name());
         payload.put("script", request.getScript());
@@ -132,7 +142,7 @@ public final class ExternalProcessProtocolCodec {
     }
 
     public static void writeResponse(OutputStream outputStream, ExternalProcessExecutionResponse response) throws IOException {
-        Map<String, Object> payload = new HashMap<String, Object>();
+        Map<String, Object> payload = new HashMap<String, Object>(RESPONSE_PAYLOAD_CAPACITY);
         payload.put("protocolVersion", PROTOCOL_VERSION);
         payload.put("success", response.isSuccess());
         payload.put("status", response.getStatus());
@@ -195,14 +205,11 @@ public final class ExternalProcessProtocolCodec {
     }
 
     public static java.util.List<String> getSupportedTransportProtocolCapabilities() {
-        java.util.List<String> capabilities = new java.util.ArrayList<String>();
-        capabilities.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.JSON_FRAMED.name());
-        capabilities.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.CUSTOM_SERIALIZER_CONTRACT.name());
-        return capabilities;
+        return SUPPORTED_TRANSPORT_PROTOCOL_CAPABILITIES;
     }
 
     public static java.util.List<String> getSupportedTransportSerializerContractIds() {
-        return java.util.Collections.emptyList();
+        return SUPPORTED_TRANSPORT_SERIALIZER_CONTRACT_IDS;
     }
 
     private static String stringValue(Object value) {
@@ -227,7 +234,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<String>();
+        java.util.LinkedHashSet<String> result = new java.util.LinkedHashSet<String>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(String.valueOf(item));
         }
@@ -277,7 +284,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode.valueOf(String.valueOf(item)));
         }
@@ -290,7 +297,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode.valueOf(String.valueOf(item)));
         }
@@ -303,7 +310,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag.valueOf(String.valueOf(item)));
         }
@@ -316,7 +323,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode.valueOf(String.valueOf(item)));
         }
@@ -330,7 +337,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode.valueOf(String.valueOf(item)));
         }
@@ -343,7 +350,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile.valueOf(String.valueOf(item)));
         }
@@ -357,7 +364,7 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability>();
+        java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability> result = new java.util.LinkedHashSet<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.valueOf(String.valueOf(item)));
         }
@@ -370,11 +377,18 @@ public final class ExternalProcessProtocolCodec {
             return Collections.emptySet();
         }
         java.util.List<Object> raw = (java.util.List<Object>) value;
-        java.util.LinkedHashSet<ResultMetadataCategory> result = new java.util.LinkedHashSet<ResultMetadataCategory>();
+        java.util.LinkedHashSet<ResultMetadataCategory> result = new java.util.LinkedHashSet<ResultMetadataCategory>(resolveCollectionCapacity(raw.size()));
         for (Object item : raw) {
             result.add(ResultMetadataCategory.valueOf(String.valueOf(item)));
         }
         return result;
+    }
+
+    private static int resolveCollectionCapacity(int expectedSize) {
+        if (expectedSize <= 0) {
+            return 16;
+        }
+        return (int) ((expectedSize / 0.75f) + 1.0f);
     }
 
     private static java.util.List<String> enumSetToNames(java.util.Set<? extends Enum<?>> values) {
@@ -394,7 +408,7 @@ public final class ExternalProcessProtocolCodec {
         }
         java.util.List<Map<String, Object>> result = new java.util.ArrayList<Map<String, Object>>(descriptors.size());
         for (ExternalProcessExtensionDescriptor descriptor : descriptors) {
-            Map<String, Object> payload = new HashMap<String, Object>();
+            Map<String, Object> payload = new HashMap<String, Object>(DESCRIPTOR_PAYLOAD_CAPACITY);
             payload.put("className", descriptor.getClassName());
             payload.put("descriptor", descriptor.getDescriptor() != null ? JsonSafeValueNormalizer.normalizeMap(descriptor.getDescriptor()) : Collections.emptyMap());
             result.add(payload);

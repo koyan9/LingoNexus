@@ -21,6 +21,8 @@ import io.github.koyan9.lingonexus.api.config.EngineConfig;
 import io.github.koyan9.lingonexus.api.config.SandboxConfig;
 import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.exception.ExternalProcessCompatibilityException;
+import io.github.koyan9.lingonexus.api.result.ResultMetadataCategory;
+import io.github.koyan9.lingonexus.api.result.ResultMetadataPolicyTemplate;
 import io.github.koyan9.lingonexus.api.executor.isolation.ExecutionIsolationMode;
 import io.github.koyan9.lingonexus.api.module.spi.ScriptModule;
 import io.github.koyan9.lingonexus.api.process.ExternalProcessDescriptorConsumer;
@@ -112,6 +114,45 @@ class ExternalProcessExecutionRequestFactoryFeatureTest {
         assertEquals(1, request.getCustomSecurityPolicies().size());
         assertEquals(1, request.getDynamicModules().size());
         assertEquals("groovy", request.getAllowedSandboxLanguages().iterator().next());
+    }
+
+
+    @Test
+    @DisplayName("Should expand named metadata policy without mutating request metadata")
+    void shouldExpandNamedMetadataPolicyWithoutMutatingRequestMetadata() {
+        EngineConfig config = EngineConfig.builder()
+                .defaultLanguage("groovy")
+                .cacheConfig(CacheConfig.builder().enabled(true).build())
+                .sandboxConfig(SandboxConfig.builder()
+                        .enabled(true)
+                        .timeoutMs(1000L)
+                        .isolationMode(ExecutionIsolationMode.EXTERNAL_PROCESS)
+                        .build())
+                .resultMetadataPolicyTemplate(ResultMetadataPolicyTemplate.builder()
+                        .name("module-only")
+                        .category(ResultMetadataCategory.MODULE)
+                        .build())
+                .build();
+        ExternalProcessExecutionRequestFactory factory = new ExternalProcessExecutionRequestFactory(
+                config,
+                new DefaultModuleRegistry(),
+                Collections.<SecurityPolicy>emptyList()
+        );
+        Map<String, Object> metadata = new HashMap<String, Object>();
+        metadata.put("trace", "abc");
+        metadata.put("resultMetadataPolicy", "module-only");
+
+        ExternalProcessExecutionRequest request = factory.createRequest(
+                "return 1",
+                "groovy",
+                ScriptContext.of(Collections.<String, Object>emptyMap(), metadata),
+                Collections.<String, Object>emptyMap()
+        );
+
+        assertEquals("module-only", metadata.get("resultMetadataPolicy"));
+        assertTrue(!metadata.containsKey("resultMetadataCategories"));
+        assertEquals(Collections.<Object>singletonList("MODULE"), request.getMetadata().get("resultMetadataCategories"));
+        assertEquals("abc", request.getMetadata().get("trace"));
     }
 
     @Test

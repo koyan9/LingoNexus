@@ -66,6 +66,31 @@ class ResultMetadataCategoryFeatureTest {
         }
     }
 
+
+    @Test
+    @DisplayName("Should fall back to engine categories when request metadata is empty")
+    void shouldFallBackToEngineCategoriesWhenRequestMetadataIsEmpty() {
+        LingoNexusExecutor executor = createExecutor(
+                ExecutionIsolationMode.DIRECT,
+                ScriptLanguage.GROOVY.getId(),
+                ResultMetadataProfile.BASIC,
+                ResultMetadataCategory.MODULE
+        );
+        try {
+            ScriptContext context = ScriptContext.builder()
+                    .put("value", 21)
+                    .build();
+
+            ScriptResult result = executor.execute("return value * 2", "groovy", context);
+            Map<String, Object> metadata = result.getMetadata();
+            assertNotNull(metadata.get(ResultMetadataKeys.MODULES_USED));
+            assertFalse(metadata.containsKey(ResultMetadataKeys.TOTAL_TIME));
+            assertFalse(metadata.containsKey(ResultMetadataKeys.THREAD_NAME));
+        } finally {
+            executor.close();
+        }
+    }
+
     @Test
     @DisplayName("Should allow request category override from comma-separated string")
     void shouldAllowRequestCategoryOverrideFromCommaSeparatedString() {
