@@ -1,0 +1,365 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to Apache Software Foundation (ASF) under one or more
+  contributor license agreements.  See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License.  You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.koyan9</groupId>
+    <artifactId>lingonexus</artifactId>
+    <version>${revision}</version>
+    <packaging>pom</packaging>
+    <name>lingonexus</name>
+    <description>A powerful, secure, and extensible script execution engine supporting multiple languages</description>
+
+    <modules>
+        <module>lingonexus-api</module>
+        <module>lingonexus-core</module>
+        <module>lingonexus-script</module>
+        <module>lingonexus-spring-boot-starter</module>
+        <module>lingonexus-utils</module>
+        <module>lingonexus-modules</module>
+        <module>lingonexus-examples</module>
+        <module>lingonexus-testcase</module>
+    </modules>
+
+    <properties>
+        <revision>1.0.0-SNAPSHOT</revision>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
+
+        <!-- Test -->
+        <junit.version>5.10.0</junit.version>
+        <mockito.version>5.5.0</mockito.version>
+        <assertj.version>3.24.2</assertj.version>
+
+        <!-- Core Dependencies -->
+        <jackson.version>2.15.0</jackson.version>
+        <caffeine.version>3.1.8</caffeine.version>
+        <slf4j.version>2.0.9</slf4j.version>
+
+        <!-- Script Engines -->
+        <groovy.version>4.0.15</groovy.version>
+        <graaljs.version>24.0.0</graaljs.version>
+        <liquor.version>1.6.6</liquor.version>
+        <kotlin.version>1.9.22</kotlin.version>
+
+        <!-- Spring (Optional) -->
+        <spring.version>6.1.5</spring.version>
+        <spring.boot.version>3.2.0</spring.boot.version>
+
+        <!-- Other -->
+        <lombok.version>1.18.30</lombok.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+             <!-- Core Dependencies -->
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-api</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-core</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-script-groovy</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-script-javascript</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-script-javaexpr</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-script-kotlin</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-utils</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-modules</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-spring</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+             <dependency>
+                 <groupId>io.github.koyan9</groupId>
+                 <artifactId>lingonexus-spring-boot-starter</artifactId>
+                 <version>${project.version}</version>
+             </dependency>
+
+            <!-- Third-party Dependencies -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.github.ben-manes.caffeine</groupId>
+                <artifactId>caffeine</artifactId>
+                <version>${caffeine.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.slf4j</groupId>
+                <artifactId>slf4j-api</artifactId>
+                <version>${slf4j.version}</version>
+            </dependency>
+
+            <!-- Script Language Dependencies -->
+            <!-- Groovy -->
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy</artifactId>
+                <version>${groovy.version}</version>
+                <optional>true</optional>
+            </dependency>
+
+            <!-- GraalJS -->
+            <dependency>
+                <groupId>org.graalvm.polyglot</groupId>
+                <artifactId>polyglot</artifactId>
+                <version>${graaljs.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.graalvm.polyglot</groupId>
+                <artifactId>js</artifactId>
+                <version>${graaljs.version}</version>
+                <type>pom</type>
+                <optional>true</optional>
+            </dependency>
+
+            <!-- liquor-eval for Java scripts -->
+            <dependency>
+                <groupId>org.noear</groupId>
+                <artifactId>liquor-eval</artifactId>
+                <version>${liquor.version}</version>
+                <optional>true</optional>
+            </dependency>
+
+            <!-- Kotlin Scripting -->
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-scripting-jvm-host</artifactId>
+                <version>${kotlin.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-scripting-common</artifactId>
+                <version>${kotlin.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-scripting-jvm</artifactId>
+                <version>${kotlin.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-scripting-jsr223</artifactId>
+                <version>${kotlin.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.jetbrains.kotlin</groupId>
+                <artifactId>kotlin-stdlib</artifactId>
+                <version>${kotlin.version}</version>
+                <optional>true</optional>
+            </dependency>
+
+            <!-- Spring Dependencies (Optional) -->
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-context</artifactId>
+                <version>${spring.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-beans</artifactId>
+                <version>${spring.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-autoconfigure</artifactId>
+                <version>${spring.boot.version}</version>
+                <optional>true</optional>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-starter-test</artifactId>
+                <version>${spring.boot.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-test</artifactId>
+                <version>${spring.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-core</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
+
+            <!-- Lombok (Optional) -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+                <optional>true</optional>
+            </dependency>
+
+            <!-- Test Dependencies -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-engine</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter-params</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>5.5.0</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <!-- Flatten Maven Plugin for CI Friendly Versions -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.5.0</version>
+                <configuration>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveCiFriendliesOnly</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten.clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.11.0</version>
+                    <configuration>
+                        <source>${maven.compiler.source}</source>
+                        <target>${maven.compiler.target}</target>
+                        <encoding>${project.build.sourceEncoding}</encoding>
+                    </configuration>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.3.0</version>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-javadoc-plugin</artifactId>
+                    <version>3.6.0</version>
+                    <executions>
+                        <execution>
+                            <id>attach-javadocs</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+</project>

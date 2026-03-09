@@ -1,0 +1,57 @@
+name: Performance Baselines
+
+on:
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: 'Comma-separated Maven Surefire test list'
+        required: false
+        default: 'ExternalProcessPerformanceBaselineTest,IsolationModeComparisonBaselineTest,LargeContextPerformanceBaselineTest,LargeContextIsolationModeComparisonBaselineTest,JavaJaninoCacheIdentityPerformanceBaselineTest'
+      skip_verified_build:
+        description: 'Skip scripts/verified-build.ps1 before running baselines'
+        required: false
+        type: boolean
+        default: false
+      use_dedicated_repo:
+        description: 'Use a dedicated Maven repository path during the run'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  run-baselines:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Run performance baseline workflow
+        shell: pwsh
+        run: |
+          $args = @(
+            '-ExecutionPolicy', 'Bypass',
+            '-File', 'scripts/run-performance-baselines.ps1',
+            '-Tests', '${{ inputs.tests }}'
+          )
+          if ('${{ inputs.skip_verified_build }}' -eq 'true') {
+            $args += '-SkipVerifiedBuild'
+          }
+          if ('${{ inputs.use_dedicated_repo }}' -eq 'true') {
+            $args += '-UseDedicatedRepo'
+          }
+          & powershell.exe @args
+
+      - name: Upload performance report artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-baselines-${{ github.run_number }}
+          path: |
+            docs/performance-reports/*.md
+            docs/performance-reports/*.log

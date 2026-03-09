@@ -1,0 +1,28 @@
+# Maven / Java build output
+target/
+**/target/
+.flattened-pom.xml
+
+# Generated benchmark reports
+docs/performance-reports/
+
+# IDE / local editor files
+.idea/
+*.iml
+
+# Local agent / temporary workdirs
+.claude/
+.tmp-api-classes/
+.tmp-javac/
+.tmp-javac2/
+
+# Local verification repositories
+.verified-m2-repo*/
+
+# Logs / local outputs
+*.log
+test_output.txt
+TmpModuleSnapshotValidation$TestModule.class
+
+# Windows odd local artifact
+nul

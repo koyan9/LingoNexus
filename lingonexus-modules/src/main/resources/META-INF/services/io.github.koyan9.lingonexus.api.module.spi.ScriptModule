@@ -1,0 +1,9 @@
+io.github.koyan9.lingonexus.modules.CodecModule
+io.github.koyan9.lingonexus.modules.CollectionModule
+io.github.koyan9.lingonexus.modules.ConvertModule
+io.github.koyan9.lingonexus.modules.DateModule
+io.github.koyan9.lingonexus.modules.FormatterModule
+io.github.koyan9.lingonexus.modules.JsonModule
+io.github.koyan9.lingonexus.modules.MathModule
+io.github.koyan9.lingonexus.modules.StringModule
+io.github.koyan9.lingonexus.modules.ValidatorModule
