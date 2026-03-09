@@ -23,6 +23,7 @@ import io.github.koyan9.lingonexus.api.config.SandboxConfig;
 import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.facade.LingoNexusExecutor;
 import io.github.koyan9.lingonexus.api.lang.ScriptLanguage;
+import io.github.koyan9.lingonexus.api.result.ExecutionStatus;
 import io.github.koyan9.lingonexus.api.result.ScriptResult;
 import io.github.koyan9.lingonexus.core.LingoNexusBuilder;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +66,7 @@ class AllSandboxSecurityTest {
         // Test with fully qualified class name
         ScriptResult scriptResult = facade.execute("new java.io.File('/tmp')", "groovy", ScriptContext.of(Map.of()));
         assertNotNull(scriptResult.getErrorMessage());
+        assertEquals(ExecutionStatus.SECURITY_VIOLATION, scriptResult.getStatus());
         assertTrue(scriptResult.getErrorMessage().contains("blacklisted class") &&
                    scriptResult.getErrorMessage().contains("java.io.File"),
                 "Expected error message to contain 'blacklisted class' and 'java.io.File', but was: " + scriptResult.getErrorMessage());

@@ -358,18 +358,24 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private ExecutionStatus determineExecutionStatus(Exception e) {
-
-        if (e instanceof ScriptSecurityException || hasCause(e, ScriptSecurityException.class)) {
-            return ExecutionStatus.SECURITY_VIOLATION;
-        } else if (e instanceof ScriptTimeoutException || hasCause(e, ScriptTimeoutException.class)) {
-            return ExecutionStatus.TIMEOUT;
-        } else if (e instanceof TimeoutException || hasCause(e, TimeoutException.class)) {
-            return ExecutionStatus.TIMEOUT;
-        } else if (e.getMessage() != null && e.getMessage().toLowerCase().contains("compile")) {
-            return ExecutionStatus.COMPILATION_ERROR;
-        } else {
-            return ExecutionStatus.FAILURE;
+        boolean timeoutDetected = false;
+        Throwable current = e;
+        while (current != null) {
+            if (current instanceof ScriptSecurityException) {
+                return ExecutionStatus.SECURITY_VIOLATION;
+            }
+            if (current instanceof ScriptTimeoutException || current instanceof TimeoutException) {
+                timeoutDetected = true;
+            }
+            current = current.getCause();
         }
+        if (timeoutDetected) {
+            return ExecutionStatus.TIMEOUT;
+        }
+        if (e.getMessage() != null && e.getMessage().toLowerCase().contains("compile")) {
+            return ExecutionStatus.COMPILATION_ERROR;
+        }
+        return ExecutionStatus.FAILURE;
     }
 
     private void shutdownSandboxes() {
