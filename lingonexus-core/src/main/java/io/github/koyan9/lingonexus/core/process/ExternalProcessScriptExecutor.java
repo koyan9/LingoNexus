@@ -176,7 +176,9 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     }
 
     public Map<String, Long> getExecutorCacheStatistics() {
-        return new HashMap<String, Long>(lastExecutorCacheStatistics);
+        return lastExecutorCacheStatistics.isEmpty()
+                ? Collections.<String, Long>emptyMap()
+                : new HashMap<String, Long>(lastExecutorCacheStatistics);
     }
 
 
@@ -197,7 +199,10 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     }
 
     public Map<String, Long> getFailureReasonCounts() {
-        Map<String, Long> snapshot = new LinkedHashMap<String, Long>();
+        if (failureReasonCounts.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, Long> snapshot = new LinkedHashMap<String, Long>(failureReasonCounts.size());
         for (Map.Entry<String, AtomicLong> entry : failureReasonCounts.entrySet()) {
             snapshot.put(entry.getKey(), entry.getValue().get());
         }

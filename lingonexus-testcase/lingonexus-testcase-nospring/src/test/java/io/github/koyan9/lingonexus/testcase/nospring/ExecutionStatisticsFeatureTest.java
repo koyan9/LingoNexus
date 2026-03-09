@@ -79,6 +79,18 @@ class ExecutionStatisticsFeatureTest {
         }
     }
 
+
+    @Test
+    @DisplayName("Should return empty language snapshot before any records")
+    void shouldReturnEmptyLanguageSnapshotBeforeAnyRecords() {
+        ExecutionStatisticsCollector collector = new ExecutionStatisticsCollector();
+
+        EngineStatistics statistics = collector.snapshot();
+
+        assertTrue(statistics.getExecutionsByLanguage().isEmpty());
+        assertEquals(0L, statistics.getTotalExecutions());
+    }
+
     @Test
     @DisplayName("Should count only explicit cache outcomes")
     void shouldCountOnlyExplicitCacheOutcomes() {

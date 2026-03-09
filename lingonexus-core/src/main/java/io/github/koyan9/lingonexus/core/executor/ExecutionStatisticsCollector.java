@@ -18,6 +18,7 @@ package io.github.koyan9.lingonexus.core.executor;
 
 import io.github.koyan9.lingonexus.api.statistics.EngineStatistics;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -66,9 +67,14 @@ public class ExecutionStatisticsCollector {
         long total = totalExecutions.sum();
         long averageExecutionTime = total == 0L ? 0L : totalExecutionTimeMs.sum() / total;
 
-        Map<String, Long> executionSnapshot = new HashMap<String, Long>();
-        for (Map.Entry<String, LongAdder> entry : executionsByLanguage.entrySet()) {
-            executionSnapshot.put(entry.getKey(), entry.getValue().sum());
+        Map<String, Long> executionSnapshot;
+        if (executionsByLanguage.isEmpty()) {
+            executionSnapshot = Collections.emptyMap();
+        } else {
+            executionSnapshot = new HashMap<String, Long>(executionsByLanguage.size());
+            for (Map.Entry<String, LongAdder> entry : executionsByLanguage.entrySet()) {
+                executionSnapshot.put(entry.getKey(), entry.getValue().sum());
+            }
         }
 
         return new EngineStatistics(
