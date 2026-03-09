@@ -154,7 +154,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 );
                 ScriptResult finalProcessResult = finalizeExternalProcessResult(
                         processResult,
-                        resultMetadata,
+                        language,
                         requestStartNanos,
                         resultMetadataCategories
                 );
@@ -166,6 +166,12 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 );
                 return finalProcessResult;
             }
+
+            resultMetadata = createInitialResultMetadata(
+                    language,
+                    config.getSandboxConfig().getIsolationMode().name(),
+                    resultMetadataCategories
+            );
 
             ScriptResult directResult = executeInProcess(
                     script,
@@ -663,16 +669,14 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         }
     }
 
-    private ScriptResult finalizeExternalProcessResult(ScriptResult processResult, Map<String, Object> resultMetadata,
+    private ScriptResult finalizeExternalProcessResult(ScriptResult processResult, String language,
                                                        long requestStartNanos,
                                                        java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
         Map<String, Object> processMetadata = processResult.getMetadata();
         Map<String, Object> externalMetadata = processMetadata != null
                 ? processMetadata
-                : new HashMap<String, Object>(resolveMergedResultMetadataCapacity(resultMetadata, null));
-        if (resultMetadata != null && !resultMetadata.isEmpty()) {
-            externalMetadata.putAll(resultMetadata);
-        }
+                : new HashMap<String, Object>(resolveMergedResultMetadataCapacity(null, null));
+        externalMetadata.putIfAbsent(ResultMetadataKeys.SCRIPT_ENGINE, language);
         externalMetadata.put(ResultMetadataKeys.ISOLATION_MODE, ExecutionIsolationMode.EXTERNAL_PROCESS.name());
         putThreadResultMetadata(externalMetadata, resultMetadataCategories);
 

@@ -115,6 +115,29 @@ class ResultMetadataCategoryFeatureTest {
         }
     }
 
+
+    @Test
+    @DisplayName("Should propagate thread category through external mode")
+    void shouldPropagateThreadCategoryThroughExternalMode() {
+        LingoNexusExecutor executor = createExecutor(
+                ExecutionIsolationMode.EXTERNAL_PROCESS,
+                ScriptLanguage.GROOVY.getId(),
+                ResultMetadataProfile.BASIC,
+                ResultMetadataCategory.THREAD
+        );
+        try {
+            ScriptResult result = executor.execute("return value * 2", "groovy",
+                    ScriptContext.of(Collections.<String, Object>singletonMap("value", 21)));
+            Map<String, Object> metadata = result.getMetadata();
+            assertNotNull(metadata.get(ResultMetadataKeys.THREAD_NAME));
+            assertNotNull(metadata.get(ResultMetadataKeys.THREAD_ID));
+            assertFalse(metadata.containsKey(ResultMetadataKeys.TOTAL_TIME));
+            assertFalse(metadata.containsKey(ResultMetadataKeys.MODULES_USED));
+        } finally {
+            executor.close();
+        }
+    }
+
     @Test
     @DisplayName("Should propagate module category through external mode")
     void shouldPropagateModuleCategoryThroughExternalMode() {
