@@ -134,10 +134,10 @@ public final class ExternalProcessWorkerMain {
 
         try {
             LingoNexusExecutor executor = ExternalProcessExecutorRegistry.getOrCreate(request);
-            ScriptContext context = ScriptContext.builder()
-                    .putAll(request.getVariables() != null ? request.getVariables() : Collections.<String, Object>emptyMap())
-                    .putAllMetadata(request.getMetadata() != null ? request.getMetadata() : Collections.<String, Object>emptyMap())
-                    .build();
+            ScriptContext context = ScriptContext.of(
+                    request.getVariables() != null ? request.getVariables() : Collections.<String, Object>emptyMap(),
+                    request.getMetadata()
+            );
             ScriptResult result = executor.execute(request.getScript(), request.getLanguage(), context);
 
             try {
@@ -178,7 +178,7 @@ public final class ExternalProcessWorkerMain {
                     "FAILURE",
                     null,
                     e.getMessage(),
-                    new HashMap<String, Object>(),
+                    Collections.<String, Object>emptyMap(),
                     0L,
                     ExternalProcessExecutorRegistry.getStatistics()
             );

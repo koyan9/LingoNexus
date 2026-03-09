@@ -62,9 +62,11 @@ public class ExternalProcessExecutionResponse implements Serializable {
         this.status = status;
         this.value = value;
         this.errorMessage = errorMessage;
-        this.metadata = metadata;
+        this.metadata = metadata != null ? metadata : Collections.<String, Object>emptyMap();
         this.executionTime = executionTime;
-        this.executorCacheStatistics = executorCacheStatistics;
+        this.executorCacheStatistics = executorCacheStatistics != null
+                ? executorCacheStatistics
+                : Collections.<String, Long>emptyMap();
         this.protocolVersion = protocolVersion;
         this.supportedTransportProtocolCapabilities = supportedTransportProtocolCapabilities != null
                 ? supportedTransportProtocolCapabilities
