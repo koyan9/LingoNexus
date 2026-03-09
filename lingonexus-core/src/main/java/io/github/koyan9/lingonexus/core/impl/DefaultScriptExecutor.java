@@ -668,8 +668,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             externalMetadata.putAll(resultMetadata);
         }
         externalMetadata.put(ResultMetadataKeys.ISOLATION_MODE, ExecutionIsolationMode.EXTERNAL_PROCESS.name());
-        putDiagnosticResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_ID, Thread.currentThread().getId());
-        putDiagnosticResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_NAME, Thread.currentThread().getName());
+        putThreadResultMetadata(externalMetadata, resultMetadataCategories);
 
         long totalTime = nanosToMillis(System.nanoTime() - requestStartNanos);
         putTimingResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, totalTime);
@@ -771,8 +770,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         Map<String, Object> resultMetadata = new HashMap<String, Object>(resolveInitialResultMetadataCapacity(resultMetadataCategories));
         resultMetadata.put(ResultMetadataKeys.SCRIPT_ENGINE, language);
         resultMetadata.put(ResultMetadataKeys.ISOLATION_MODE, isolationMode);
-        putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_ID, Thread.currentThread().getId());
-        putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.THREAD, ResultMetadataKeys.THREAD_NAME, Thread.currentThread().getName());
+        putThreadResultMetadata(resultMetadata, resultMetadataCategories);
         return resultMetadata;
     }
 
@@ -860,6 +858,16 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             }
         }
         return categories;
+    }
+
+    private void putThreadResultMetadata(Map<String, Object> resultMetadata,
+                                         java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+        if (resultMetadataCategories == null || !resultMetadataCategories.contains(ResultMetadataCategory.THREAD)) {
+            return;
+        }
+        Thread currentThread = Thread.currentThread();
+        resultMetadata.put(ResultMetadataKeys.THREAD_ID, currentThread.getId());
+        resultMetadata.put(ResultMetadataKeys.THREAD_NAME, currentThread.getName());
     }
 
     private void putTimingResultMetadata(Map<String, Object> resultMetadata, java.util.Set<ResultMetadataCategory> resultMetadataCategories,
