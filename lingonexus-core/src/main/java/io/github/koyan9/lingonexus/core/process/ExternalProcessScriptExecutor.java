@@ -259,15 +259,17 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     }
 
     private void updateExecutorCacheStatistics(ExternalProcessExecutionResponse response) {
-        if (response != null && response.getExecutorCacheStatistics() != null) {
-            lastExecutorCacheStatistics = new HashMap<String, Long>(response.getExecutorCacheStatistics());
+        if (response == null || response.getExecutorCacheStatistics() == null) {
+            return;
         }
+        Map<String, Long> executorCacheStatistics = response.getExecutorCacheStatistics();
+        lastExecutorCacheStatistics = executorCacheStatistics.isEmpty()
+                ? Collections.<String, Long>emptyMap()
+                : executorCacheStatistics;
     }
 
     private ScriptResult toScriptResult(ExternalProcessExecutionResponse response) {
-        Map<String, Object> metadata = response.getMetadata() != null
-                ? new HashMap<String, Object>(response.getMetadata())
-                : new HashMap<String, Object>();
+        Map<String, Object> metadata = resolveResponseMetadata(response);
 
         ExecutionStatus status = response.getStatus() != null
                 ? ExecutionStatus.valueOf(response.getStatus())
@@ -281,6 +283,14 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
                 response.getExecutionTime(),
                 metadata
         );
+    }
+
+    private Map<String, Object> resolveResponseMetadata(ExternalProcessExecutionResponse response) {
+        if (response == null || response.getMetadata() == null) {
+            return new HashMap<String, Object>();
+        }
+        Map<String, Object> metadata = response.getMetadata();
+        return metadata.isEmpty() ? new HashMap<String, Object>() : metadata;
     }
 
     private void validateJsonSafeRequest(ExternalProcessExecutionRequest request) throws IOException {

@@ -34,6 +34,47 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ExternalProcessScriptExecutorFeatureTest {
 
 
+
+    @Test
+    @DisplayName("Should map successful worker response and cache statistics")
+    void shouldMapSuccessfulWorkerResponseAndCacheStatistics() {
+        ExternalProcessWorkerPool workerPool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> {
+                    throw new AssertionError("Worker factory should not be used in this scenario");
+                }
+        ) {
+            @Override
+            public ExternalProcessWorkerClient borrowWorker() {
+                return new SuccessfulWorker();
+            }
+
+            @Override
+            public void returnWorker(ExternalProcessWorkerClient returnedWorker) {
+            }
+
+            @Override
+            public void discardWorker(ExternalProcessWorkerClient discardedWorker) {
+            }
+        };
+        ExternalProcessScriptExecutor executor = new ExternalProcessScriptExecutor(workerPool);
+        try {
+            ScriptResult result = executor.execute(ExternalProcessExecutionRequest.healthCheck(), 1000L);
+
+            assertTrue(result.isSuccess());
+            assertEquals("SUCCESS", result.getStatus().name());
+            assertEquals("ok", result.getMetadata().get("marker"));
+            assertEquals(Long.valueOf(7L), executor.getExecutorCacheStatistics().get("executorCacheHits"));
+        } finally {
+            executor.shutdown();
+        }
+    }
+
     @Test
     @DisplayName("Should skip handshake ping when protocol version already exists and no requirements")
     void shouldSkipHandshakePingWhenProtocolVersionAlreadyExistsAndNoRequirements() {
@@ -325,6 +366,43 @@ class ExternalProcessScriptExecutorFeatureTest {
             assertEquals(1L, executor.getFailureReasonCounts().get("worker_execution_failed"));
         } finally {
             executor.shutdown();
+        }
+    }
+
+
+    private static final class SuccessfulWorker extends ExternalProcessWorkerClient {
+
+        private SuccessfulWorker() {
+            super();
+        }
+
+        @Override
+        public boolean isAlive() {
+            return true;
+        }
+
+        @Override
+        public String getProtocolVersion() {
+            return "1";
+        }
+
+        @Override
+        public java.util.List<String> getSupportedTransportProtocolCapabilities() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public java.util.List<String> getSupportedTransportSerializerContractIds() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public synchronized ExternalProcessExecutionResponse execute(ExternalProcessExecutionRequest request, long timeoutMs) {
+            java.util.Map<String, Object> metadata = new java.util.HashMap<String, Object>();
+            metadata.put("marker", "ok");
+            java.util.Map<String, Long> cacheStats = new java.util.HashMap<String, Long>();
+            cacheStats.put("executorCacheHits", 7L);
+            return new ExternalProcessExecutionResponse(true, "SUCCESS", Boolean.TRUE, null, metadata, 5L, cacheStats);
         }
     }
 
