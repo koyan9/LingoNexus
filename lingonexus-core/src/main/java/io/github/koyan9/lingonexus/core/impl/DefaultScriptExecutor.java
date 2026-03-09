@@ -193,23 +193,17 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             long elapsedTime = nanosToMillis(System.nanoTime() - requestStartNanos);
             logger.error("Script execution failed: language={}, error={}", language, e.getMessage(), e);
 
+            boolean requiresMetadataFiltering;
             if (resultMetadata == null) {
-                resultMetadata = createInitialResultMetadata(
+                resultMetadata = createErrorResultMetadata(
                         language,
-                        config.getSandboxConfig().getIsolationMode().name(),
-                        resultMetadataCategories
+                        resultMetadataCategories,
+                        e,
+                        false
                 );
-            }
-
-            resultMetadata.put(ResultMetadataKeys.ERROR_TYPE, e.getClass().getSimpleName());
-            resultMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, e.getMessage());
-            boolean requiresMetadataFiltering = false;
-            if (e instanceof ExternalProcessCompatibilityException) {
-                populateExternalProcessCompatibilityMetadata(
-                        resultMetadata,
-                        (ExternalProcessCompatibilityException) e
-                );
-                requiresMetadataFiltering = true;
+                requiresMetadataFiltering = e instanceof ExternalProcessCompatibilityException;
+            } else {
+                requiresMetadataFiltering = populateErrorResultMetadata(resultMetadata, e, false);
             }
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.EXECUTION_TIME, elapsedTime);
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, elapsedTime);
@@ -247,14 +241,12 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 ExecutionStatus status = determineExecutionStatus(e);
 
                 java.util.Set<ResultMetadataCategory> resultMetadataCategories = resolveResultMetadataCategories(context);
-                Map<String, Object> errorMetadata = createInitialResultMetadata(
+                Map<String, Object> errorMetadata = createErrorResultMetadata(
                         langToUse,
-                        config.getSandboxConfig().getIsolationMode().name(),
-                        resultMetadataCategories
+                        resultMetadataCategories,
+                        e,
+                        true
                 );
-                errorMetadata.put(ResultMetadataKeys.ERROR_TYPE, e.getClass().getSimpleName());
-                errorMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, e.getMessage());
-                errorMetadata.put("async", true);
 
                 return ScriptResult.of(status, null, e, executionTime, errorMetadata);
             }
@@ -773,6 +765,37 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         logger.debug("All security policies passed");
         putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.SECURITY, ResultMetadataKeys.SECURITY_CHECKS, securityChecksPassed);
         return nanosToMillis(System.nanoTime() - validationStartNanos);
+    }
+
+    private Map<String, Object> createErrorResultMetadata(String language,
+                                                        java.util.Set<ResultMetadataCategory> resultMetadataCategories,
+                                                        Exception exception,
+                                                        boolean async) {
+        Map<String, Object> errorMetadata = createInitialResultMetadata(
+                language,
+                config.getSandboxConfig().getIsolationMode().name(),
+                resultMetadataCategories
+        );
+        populateErrorResultMetadata(errorMetadata, exception, async);
+        return errorMetadata;
+    }
+
+    private boolean populateErrorResultMetadata(Map<String, Object> resultMetadata,
+                                                Exception exception,
+                                                boolean async) {
+        resultMetadata.put(ResultMetadataKeys.ERROR_TYPE, exception.getClass().getSimpleName());
+        resultMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, exception.getMessage());
+        if (async) {
+            resultMetadata.put("async", true);
+        }
+        if (exception instanceof ExternalProcessCompatibilityException) {
+            populateExternalProcessCompatibilityMetadata(
+                    resultMetadata,
+                    (ExternalProcessCompatibilityException) exception
+            );
+            return true;
+        }
+        return false;
     }
 
     private Map<String, Object> createInitialResultMetadata(String language, String isolationMode,
