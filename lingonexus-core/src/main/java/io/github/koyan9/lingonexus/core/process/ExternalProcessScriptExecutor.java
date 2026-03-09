@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -221,16 +220,11 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
             );
         }
 
-        Set<String> supportedProtocolCapabilities = new HashSet<String>(worker.getSupportedTransportProtocolCapabilities());
-        Set<String> requiredProtocolCapabilities = new HashSet<String>();
-        if (request.getRequiredSandboxTransportProtocolCapabilities() != null) {
-            for (io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability capability : request.getRequiredSandboxTransportProtocolCapabilities()) {
-                if (capability != null) {
-                    requiredProtocolCapabilities.add(capability.name());
-                }
-            }
-        }
-        if (!supportedProtocolCapabilities.containsAll(requiredProtocolCapabilities)) {
+        java.util.List<String> requiredProtocolCapabilities = toRequiredProtocolCapabilityNames(
+                request.getRequiredSandboxTransportProtocolCapabilities()
+        );
+        java.util.List<String> supportedProtocolCapabilities = worker.getSupportedTransportProtocolCapabilities();
+        if (!requiredProtocolCapabilities.isEmpty() && !supportedProtocolCapabilities.containsAll(requiredProtocolCapabilities)) {
             throw protocolNegotiationFailure(
                     "protocol_capability_mismatch",
                     "External worker protocol negotiation failed: required capabilities " + requiredProtocolCapabilities
@@ -238,17 +232,30 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
             );
         }
 
-        Set<String> supportedSerializerContracts = new HashSet<String>(worker.getSupportedTransportSerializerContractIds());
-        Set<String> requiredSerializerContracts = request.getRequiredSandboxTransportSerializerContractIds() != null
-                ? new HashSet<String>(request.getRequiredSandboxTransportSerializerContractIds())
-                : Collections.<String>emptySet();
-        if (!supportedSerializerContracts.containsAll(requiredSerializerContracts)) {
+        Set<String> requiredSerializerContracts = request.getRequiredSandboxTransportSerializerContractIds();
+        java.util.List<String> supportedSerializerContracts = worker.getSupportedTransportSerializerContractIds();
+        if (requiredSerializerContracts != null && !requiredSerializerContracts.isEmpty()
+                && !supportedSerializerContracts.containsAll(requiredSerializerContracts)) {
             throw protocolNegotiationFailure(
                     "serializer_contract_mismatch",
                     "External worker protocol negotiation failed: required serializer contracts " + requiredSerializerContracts
                             + " are not supported by worker " + supportedSerializerContracts
             );
         }
+    }
+
+    private java.util.List<String> toRequiredProtocolCapabilityNames(
+            Set<io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability> requiredCapabilities) {
+        if (requiredCapabilities == null || requiredCapabilities.isEmpty()) {
+            return Collections.emptyList();
+        }
+        java.util.List<String> result = new java.util.ArrayList<String>(requiredCapabilities.size());
+        for (io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability capability : requiredCapabilities) {
+            if (capability != null) {
+                result.add(capability.name());
+            }
+        }
+        return result;
     }
 
     private void updateExecutorCacheStatistics(ExternalProcessExecutionResponse response) {

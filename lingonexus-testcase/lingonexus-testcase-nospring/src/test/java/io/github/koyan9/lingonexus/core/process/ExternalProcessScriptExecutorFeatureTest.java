@@ -24,6 +24,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.Collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,6 +32,46 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("External Process Script Executor Feature Tests")
 class ExternalProcessScriptExecutorFeatureTest {
+
+
+    @Test
+    @DisplayName("Should skip handshake ping when protocol version already exists and no requirements")
+    void shouldSkipHandshakePingWhenProtocolVersionAlreadyExistsAndNoRequirements() {
+        NegotiatedWorker worker = new NegotiatedWorker();
+        ExternalProcessWorkerPool workerPool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> {
+                    throw new AssertionError("Worker factory should not be used in this scenario");
+                }
+        ) {
+            @Override
+            public ExternalProcessWorkerClient borrowWorker() {
+                return worker;
+            }
+
+            @Override
+            public void returnWorker(ExternalProcessWorkerClient returnedWorker) {
+            }
+
+            @Override
+            public void discardWorker(ExternalProcessWorkerClient discardedWorker) {
+            }
+        };
+        ExternalProcessScriptExecutor executor = new ExternalProcessScriptExecutor(workerPool);
+        try {
+            ScriptResult result = executor.execute(ExternalProcessExecutionRequest.healthCheck(), 1000L);
+
+            assertTrue(result.isSuccess());
+            assertEquals(0, worker.pingCount);
+        } finally {
+            executor.shutdown();
+        }
+    }
 
     @Test
     @DisplayName("Should classify startup failure when worker borrow fails with IO error")
@@ -286,6 +327,47 @@ class ExternalProcessScriptExecutorFeatureTest {
             executor.shutdown();
         }
     }
+
+    private static final class NegotiatedWorker extends ExternalProcessWorkerClient {
+
+        private int pingCount;
+
+        private NegotiatedWorker() {
+            super();
+        }
+
+        @Override
+        public boolean isAlive() {
+            return true;
+        }
+
+        @Override
+        public synchronized boolean ping() {
+            pingCount++;
+            return true;
+        }
+
+        @Override
+        public String getProtocolVersion() {
+            return "1";
+        }
+
+        @Override
+        public java.util.List<String> getSupportedTransportProtocolCapabilities() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public java.util.List<String> getSupportedTransportSerializerContractIds() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public synchronized ExternalProcessExecutionResponse execute(ExternalProcessExecutionRequest request, long timeoutMs) {
+            return new ExternalProcessExecutionResponse(true, "SUCCESS", Boolean.TRUE, null, Collections.<String, Object>emptyMap(), 0L);
+        }
+    }
+
 
     private static final class TerminatingWorker extends ExternalProcessWorkerClient {
 
