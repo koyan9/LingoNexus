@@ -141,6 +141,22 @@ class BasicIntegrationTest {
         assertThat(((Number) result.getValue()).doubleValue()).isGreaterThan(1000);
     }
 
+
+    @Test
+    @DisplayName("Should fail fast for unsupported language")
+    void shouldFailFastForUnsupportedLanguage() {
+        // Given
+        String script = "return 1";
+
+        // When
+        ScriptResult result = facade.execute(script, "unsupported-language", ScriptContext.of(new HashMap<>()));
+
+        // Then
+        assertThat(result.isFailure()).isTrue();
+        assertThat(result.getErrorMessage()).contains("Unsupported language");
+        assertThat(result.getMetadata()).isNull();
+    }
+
     @Test
     @DisplayName("Should get supported languages")
     void shouldGetSupportedLanguages() {

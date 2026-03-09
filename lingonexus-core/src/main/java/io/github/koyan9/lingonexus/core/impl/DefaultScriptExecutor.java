@@ -130,19 +130,19 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             Objects.requireNonNull(language, "Language cannot be null");
             Objects.requireNonNull(context, "Context cannot be null");
 
-            resultMetadataCategories = resolveResultMetadataCategories(context);
-            resultMetadata = createInitialResultMetadata(
-                    language,
-                    config.getSandboxConfig().getIsolationMode().name(),
-                    resultMetadataCategories
-            );
-
             if (!sandboxManager.supports(language)) {
                 String error = "Unsupported language: " + language +
                         ". Supported languages: " + sandboxManager.getSupportedLanguages();
                 logger.error(error);
                 return ScriptResult.failure(error);
             }
+
+            resultMetadataCategories = resolveResultMetadataCategories(context);
+            resultMetadata = createInitialResultMetadata(
+                    language,
+                    config.getSandboxConfig().getIsolationMode().name(),
+                    resultMetadataCategories
+            );
 
             if (config.getSandboxConfig().getIsolationMode() == ExecutionIsolationMode.EXTERNAL_PROCESS) {
                 PreparedExecution preparedExecution = executionPreparationService.prepareForExternalProcess(context);
