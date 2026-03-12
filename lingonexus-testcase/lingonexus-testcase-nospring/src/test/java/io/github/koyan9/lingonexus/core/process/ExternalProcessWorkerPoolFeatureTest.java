@@ -397,6 +397,7 @@ class ExternalProcessWorkerPoolFeatureTest {
             assertTimeoutPreemptively(java.time.Duration.ofSeconds(1), () -> {
                 assertThrows(ExternalProcessWorkerBorrowTimeoutException.class, pool::borrowWorker);
             });
+            assertEquals(1L, pool.getStatistics().getBorrowTimeoutCount());
         } finally {
             pool.shutdown();
         }

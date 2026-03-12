@@ -29,6 +29,9 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -38,6 +41,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("External Process Protocol Codec Feature Tests")
@@ -151,7 +155,26 @@ class ExternalProcessProtocolCodecFeatureTest {
         assertEquals(serializerContracts, decoded.getSupportedTransportSerializerContractIds());
     }
 
+    @Test
+    @DisplayName("Should reject oversized protocol frames")
+    void shouldRejectOversizedProtocolFrames() throws Exception {
+        int limit = resolveMaxFrameBytes();
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
+        dataOutputStream.writeInt(limit + 1);
+        dataOutputStream.flush();
+
+        ByteArrayInputStream inputStream = new ByteArrayInputStream(outputStream.toByteArray());
+        assertThrows(IOException.class, () -> ExternalProcessProtocolCodec.readResponse(inputStream));
+    }
+
     private enum SampleState {
         READY
+    }
+
+    private int resolveMaxFrameBytes() throws Exception {
+        Field field = ExternalProcessProtocolCodec.class.getDeclaredField("MAX_FRAME_BYTES");
+        field.setAccessible(true);
+        return (Integer) field.get(null);
     }
 }
