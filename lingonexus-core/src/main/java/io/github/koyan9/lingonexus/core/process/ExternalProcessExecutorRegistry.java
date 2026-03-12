@@ -16,7 +16,6 @@
  */
 package io.github.koyan9.lingonexus.core.process;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.koyan9.lingonexus.api.config.CacheConfig;
 import io.github.koyan9.lingonexus.api.config.LingoNexusConfig;
 import io.github.koyan9.lingonexus.api.config.SandboxConfig;
@@ -43,13 +42,11 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 public final class ExternalProcessExecutorRegistry {
 
-    private static final int SIGNATURE_CAPACITY = 32;
     private static final int DESCRIPTOR_ENTRY_CAPACITY = 4;
     private static final String STAGE_WORKER_EXECUTION = "worker_execution";
     private static final String COMPONENT_EXTERNAL_WORKER = "external-worker";
     private static final String REASON_SECURITY_POLICY_DESCRIPTOR_LOAD_FAILED = "security_policy_descriptor_load_failed";
     private static final String REASON_SCRIPT_MODULE_DESCRIPTOR_LOAD_FAILED = "script_module_descriptor_load_failed";
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final LinkedHashMap<String, CachedExecutorEntry> EXECUTORS = new LinkedHashMap<String, CachedExecutorEntry>(16, 0.75f, true);
     private static final AtomicLong cacheHits = new AtomicLong(0);
     private static final AtomicLong cacheMisses = new AtomicLong(0);
@@ -133,38 +130,38 @@ public final class ExternalProcessExecutorRegistry {
     }
 
     private static String buildSignature(ExternalProcessExecutionRequest request) throws Exception {
-        Map<String, Object> signature = new LinkedHashMap<String, Object>(SIGNATURE_CAPACITY);
-        signature.put("defaultLanguage", request.getDefaultLanguage());
-        signature.put("cacheEnabled", request.isCacheEnabled());
-        signature.put("cacheMaxSize", request.getCacheMaxSize());
-        signature.put("cacheExpireAfterWriteMs", request.getCacheExpireAfterWriteMs());
-        signature.put("cacheExpireAfterAccessMs", request.getCacheExpireAfterAccessMs());
-        signature.put("sandboxEnabled", request.isSandboxEnabled());
-        signature.put("maxScriptSize", request.getMaxScriptSize());
-        signature.put("enableEngineCache", request.isEnableEngineCache());
-        signature.put("classWhitelist", request.getClassWhitelist() != null ? request.getClassWhitelist() : Collections.emptySet());
-        signature.put("classBlacklist", request.getClassBlacklist() != null ? request.getClassBlacklist() : Collections.emptySet());
-        signature.put("excludeScriptModules", request.getExcludeScriptModules() != null ? request.getExcludeScriptModules() : Collections.emptySet());
-        signature.put("allowedScriptModules", request.getAllowedScriptModules() != null ? request.getAllowedScriptModules() : Collections.emptySet());
-        signature.put("allowedSandboxImplementations", request.getAllowedSandboxImplementations() != null ? request.getAllowedSandboxImplementations() : Collections.emptySet());
-        signature.put("allowedSandboxLanguages", request.getAllowedSandboxLanguages() != null ? request.getAllowedSandboxLanguages() : Collections.emptySet());
-        signature.put("allowedSandboxHostAccessModes", request.getAllowedSandboxHostAccessModes() != null ? request.getAllowedSandboxHostAccessModes() : Collections.emptySet());
-        signature.put("allowedSandboxHostRestrictionModes", request.getAllowedSandboxHostRestrictionModes() != null ? request.getAllowedSandboxHostRestrictionModes() : Collections.emptySet());
-        signature.put("requiredSandboxHostRestrictionFlags", request.getRequiredSandboxHostRestrictionFlags() != null ? request.getRequiredSandboxHostRestrictionFlags() : Collections.emptySet());
-        signature.put("allowedSandboxResultTransportModes", request.getAllowedSandboxResultTransportModes() != null ? request.getAllowedSandboxResultTransportModes() : Collections.emptySet());
-        signature.put("allowedSandboxTransportSerializerModes", request.getAllowedSandboxTransportSerializerModes() != null ? request.getAllowedSandboxTransportSerializerModes() : Collections.emptySet());
-        signature.put("allowedSandboxTransportPayloadProfiles", request.getAllowedSandboxTransportPayloadProfiles() != null ? request.getAllowedSandboxTransportPayloadProfiles() : Collections.emptySet());
-        signature.put("requiredSandboxTransportProtocolCapabilities", request.getRequiredSandboxTransportProtocolCapabilities() != null ? request.getRequiredSandboxTransportProtocolCapabilities() : Collections.emptySet());
-        signature.put("requiredSandboxTransportSerializerContractIds", request.getRequiredSandboxTransportSerializerContractIds() != null ? request.getRequiredSandboxTransportSerializerContractIds() : Collections.emptySet());
-        signature.put("requireEngineCacheCapableSandbox", request.isRequireEngineCacheCapableSandbox());
-        signature.put("requireExternalProcessCompatibleSandbox", request.isRequireExternalProcessCompatibleSandbox());
-        signature.put("requireJsonSafeExternalResult", request.isRequireJsonSafeExternalResult());
-        signature.put("requireJsonSafeExternalMetadata", request.isRequireJsonSafeExternalMetadata());
-        signature.put("resultMetadataProfile", request.getResultMetadataProfile().name());
-        signature.put("resultMetadataCategories", request.getResultMetadataCategories() != null ? request.getResultMetadataCategories() : Collections.emptySet());
-        signature.put("customSecurityPolicies", request.getCustomSecurityPolicies() != null ? normalizeDescriptors(request.getCustomSecurityPolicies()) : Collections.emptyList());
-        signature.put("dynamicModules", request.getDynamicModules() != null ? normalizeDescriptors(request.getDynamicModules()) : Collections.emptyList());
-        return OBJECT_MAPPER.writeValueAsString(signature);
+        StringBuilder signature = new StringBuilder(512);
+        appendField(signature, "defaultLanguage", request.getDefaultLanguage());
+        appendField(signature, "cacheEnabled", request.isCacheEnabled());
+        appendField(signature, "cacheMaxSize", request.getCacheMaxSize());
+        appendField(signature, "cacheExpireAfterWriteMs", request.getCacheExpireAfterWriteMs());
+        appendField(signature, "cacheExpireAfterAccessMs", request.getCacheExpireAfterAccessMs());
+        appendField(signature, "sandboxEnabled", request.isSandboxEnabled());
+        appendField(signature, "maxScriptSize", request.getMaxScriptSize());
+        appendField(signature, "enableEngineCache", request.isEnableEngineCache());
+        appendField(signature, "classWhitelist", defaultSet(request.getClassWhitelist()));
+        appendField(signature, "classBlacklist", defaultSet(request.getClassBlacklist()));
+        appendField(signature, "excludeScriptModules", defaultSet(request.getExcludeScriptModules()));
+        appendField(signature, "allowedScriptModules", defaultSet(request.getAllowedScriptModules()));
+        appendField(signature, "allowedSandboxImplementations", defaultSet(request.getAllowedSandboxImplementations()));
+        appendField(signature, "allowedSandboxLanguages", defaultSet(request.getAllowedSandboxLanguages()));
+        appendField(signature, "allowedSandboxHostAccessModes", defaultHostAccessModes(request.getAllowedSandboxHostAccessModes()));
+        appendField(signature, "allowedSandboxHostRestrictionModes", defaultHostRestrictionModes(request.getAllowedSandboxHostRestrictionModes()));
+        appendField(signature, "requiredSandboxHostRestrictionFlags", defaultHostRestrictionFlags(request.getRequiredSandboxHostRestrictionFlags()));
+        appendField(signature, "allowedSandboxResultTransportModes", defaultResultTransportModes(request.getAllowedSandboxResultTransportModes()));
+        appendField(signature, "allowedSandboxTransportSerializerModes", defaultTransportSerializerModes(request.getAllowedSandboxTransportSerializerModes()));
+        appendField(signature, "allowedSandboxTransportPayloadProfiles", defaultTransportPayloadProfiles(request.getAllowedSandboxTransportPayloadProfiles()));
+        appendField(signature, "requiredSandboxTransportProtocolCapabilities", defaultTransportProtocolCapabilities(request.getRequiredSandboxTransportProtocolCapabilities()));
+        appendField(signature, "requiredSandboxTransportSerializerContractIds", defaultTransportSerializerContractIds(request.getRequiredSandboxTransportSerializerContractIds()));
+        appendField(signature, "requireEngineCacheCapableSandbox", request.isRequireEngineCacheCapableSandbox());
+        appendField(signature, "requireExternalProcessCompatibleSandbox", request.isRequireExternalProcessCompatibleSandbox());
+        appendField(signature, "requireJsonSafeExternalResult", request.isRequireJsonSafeExternalResult());
+        appendField(signature, "requireJsonSafeExternalMetadata", request.isRequireJsonSafeExternalMetadata());
+        appendField(signature, "resultMetadataProfile", request.getResultMetadataProfile().name());
+        appendField(signature, "resultMetadataCategories", request.getResultMetadataCategories());
+        appendField(signature, "customSecurityPolicies", normalizeDescriptors(request.getCustomSecurityPolicies()));
+        appendField(signature, "dynamicModules", normalizeDescriptors(request.getDynamicModules()));
+        return signature.toString();
     }
 
     private static LingoNexusExecutor createExecutor(ExternalProcessExecutionRequest request) {
@@ -282,6 +279,114 @@ public final class ExternalProcessExecutorRegistry {
             normalized.add(item);
         }
         return normalized;
+    }
+
+    private static void appendField(StringBuilder signature, String key, Object value) {
+        appendToken(signature, key);
+        appendToken(signature, canonicalValue(value));
+        signature.append('|');
+    }
+
+    private static void appendToken(StringBuilder signature, String token) {
+        if (token == null) {
+            signature.append("-1:");
+            return;
+        }
+        signature.append(token.length()).append(':').append(token);
+    }
+
+    private static String canonicalValue(Object value) {
+        if (value == null) {
+            return "N";
+        }
+        if (value instanceof String) {
+            return "S:" + value;
+        }
+        if (value instanceof Boolean) {
+            return "B:" + value;
+        }
+        if (value instanceof Number) {
+            return "N:" + value;
+        }
+        if (value instanceof Enum<?>) {
+            return "E:" + ((Enum<?>) value).name();
+        }
+        if (value instanceof Map<?, ?>) {
+            return canonicalMap((Map<?, ?>) value);
+        }
+        if (value instanceof java.util.Collection<?>) {
+            return canonicalCollection((java.util.Collection<?>) value);
+        }
+        if (value.getClass().isArray()) {
+            return canonicalArray(value);
+        }
+        return "O:" + String.valueOf(value);
+    }
+
+    private static String canonicalMap(Map<?, ?> map) {
+        if (map == null || map.isEmpty()) {
+            return "M{}";
+        }
+        List<KeyValue> entries = new ArrayList<KeyValue>(map.size());
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            entries.add(new KeyValue(String.valueOf(entry.getKey()), entry.getValue()));
+        }
+        entries.sort(java.util.Comparator.comparing(keyValue -> keyValue.key));
+        StringBuilder builder = new StringBuilder();
+        builder.append("M{");
+        for (KeyValue entry : entries) {
+            appendToken(builder, entry.key);
+            appendToken(builder, canonicalValue(entry.value));
+            builder.append(';');
+        }
+        builder.append('}');
+        return builder.toString();
+    }
+
+    private static String canonicalCollection(java.util.Collection<?> collection) {
+        if (collection == null || collection.isEmpty()) {
+            return "L[]";
+        }
+        java.util.List<String> items = new ArrayList<String>(collection.size());
+        for (Object item : collection) {
+            items.add(canonicalValue(item));
+        }
+        if (collection instanceof java.util.Set) {
+            java.util.Collections.sort(items);
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("L[");
+        for (String item : items) {
+            appendToken(builder, item);
+            builder.append(',');
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private static String canonicalArray(Object array) {
+        int length = java.lang.reflect.Array.getLength(array);
+        if (length == 0) {
+            return "L[]";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append("L[");
+        for (int index = 0; index < length; index++) {
+            appendToken(builder, canonicalValue(java.lang.reflect.Array.get(array, index)));
+            builder.append(',');
+        }
+        builder.append(']');
+        return builder.toString();
+    }
+
+    private static final class KeyValue {
+        private final String key;
+        private final Object value;
+
+        private KeyValue(String key, Object value) {
+            this.key = key;
+            this.value = value;
+        }
     }
 
     private static java.util.Set<String> defaultSet(java.util.Set<String> source) {
