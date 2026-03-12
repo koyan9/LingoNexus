@@ -43,6 +43,9 @@ final class ResponseFallbackCompiledScript implements CompiledScript {
             value.put(Integer.valueOf(1), "bad-key");
             return value;
         }
+        if (source.contains("bad-metadata")) {
+            return "ok";
+        }
         return "fallback-default";
     }
 

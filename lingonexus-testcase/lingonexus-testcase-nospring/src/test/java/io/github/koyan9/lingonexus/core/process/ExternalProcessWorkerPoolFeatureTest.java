@@ -21,10 +21,15 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("External Process Worker Pool Feature Tests")
@@ -55,6 +60,105 @@ class ExternalProcessWorkerPoolFeatureTest {
         }
     }
 
+    @Test
+    @DisplayName("Should succeed after retry when startup eventually succeeds")
+    void shouldSucceedAfterRetryWhenStartupEventuallySucceeds() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        AtomicInteger attempts = new AtomicInteger(0);
+
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                1,
+                0,
+                0L,
+                (javaCommand, classpath) -> {
+                    if (attempts.getAndIncrement() == 0) {
+                        throw new IOException("simulated startup failure");
+                    }
+                    return worker;
+                }
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            assertSame(worker, borrowed);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(1L, statistics.getStartupFailureCount());
+            assertEquals(1L, statistics.getBorrowCount());
+            assertEquals(1, statistics.getCreatedWorkers());
+
+            pool.returnWorker(borrowed);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should count multiple startup failures before eventual success")
+    void shouldCountMultipleStartupFailuresBeforeEventualSuccess() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        AtomicInteger attempts = new AtomicInteger(0);
+
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                2,
+                0,
+                0L,
+                (javaCommand, classpath) -> {
+                    if (attempts.getAndIncrement() < 2) {
+                        throw new IOException("simulated startup failure");
+                    }
+                    return worker;
+                }
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            assertSame(worker, borrowed);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(2L, statistics.getStartupFailureCount());
+            assertEquals(1L, statistics.getBorrowCount());
+            assertEquals(1, statistics.getCreatedWorkers());
+
+            pool.returnWorker(borrowed);
+            assertEquals(1L, pool.getStatistics().getReturnCount());
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should track borrow and return counts for successful roundtrip")
+    void shouldTrackBorrowAndReturnCountsForSuccessfulRoundtrip() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            pool.returnWorker(borrowed);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(1L, statistics.getBorrowCount());
+            assertEquals(1L, statistics.getReturnCount());
+            assertEquals(0L, statistics.getDiscardCount());
+        } finally {
+            pool.shutdown();
+        }
+    }
 
     @Test
     @DisplayName("Should reuse worker handshake snapshot without rebuilding")
@@ -150,6 +254,186 @@ class ExternalProcessWorkerPoolFeatureTest {
 
             pool.returnWorker(replacement);
         } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should evict idle worker after TTL and borrow replacement")
+    void shouldEvictIdleWorkerAfterTtlAndBorrowReplacement() throws Exception {
+        MutableWorker firstWorker = new MutableWorker();
+        MutableWorker secondWorker = new MutableWorker();
+        AtomicInteger creationCount = new AtomicInteger(0);
+
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                1L,
+                (javaCommand, classpath) -> creationCount.getAndIncrement() == 0 ? firstWorker : secondWorker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            assertSame(firstWorker, borrowed);
+            pool.returnWorker(borrowed);
+
+            Thread.sleep(5L);
+
+            ExternalProcessWorkerClient replacement = pool.borrowWorker();
+            assertSame(secondWorker, replacement);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(1L, statistics.getEvictionCount());
+            assertEquals(1L, statistics.getDiscardCount());
+            assertEquals(1, statistics.getCreatedWorkers());
+
+            pool.returnWorker(replacement);
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should discard dead worker on return and record health-check failure")
+    void shouldDiscardDeadWorkerOnReturnAndRecordHealthCheckFailure() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            worker.alive = false;
+            pool.returnWorker(borrowed);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(1L, statistics.getHealthCheckFailureCount());
+            assertEquals(1L, statistics.getDiscardCount());
+            assertEquals(0, statistics.getIdleWorkers());
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should discard returned worker after pool shutdown")
+    void shouldDiscardReturnedWorkerAfterPoolShutdown() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+            pool.shutdown();
+            pool.returnWorker(borrowed);
+
+            ExternalProcessWorkerPoolStatistics statistics = pool.getStatistics();
+            assertEquals(1L, statistics.getDiscardCount());
+            assertEquals(0, statistics.getIdleWorkers());
+            assertEquals(0, statistics.getCreatedWorkers());
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should reject borrow after pool shutdown")
+    void shouldRejectBorrowAfterPoolShutdown() {
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> new MutableWorker()
+        );
+
+        pool.shutdown();
+        assertThrows(IllegalStateException.class, pool::borrowWorker);
+    }
+
+    @Test
+    @DisplayName("Should time out when borrow exceeds configured timeout")
+    void shouldTimeOutWhenBorrowExceedsConfiguredTimeout() {
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                10L,
+                (javaCommand, classpath) -> new ExternalProcessWorkerClient() {
+                    @Override
+                    public boolean isAlive() {
+                        return false;
+                    }
+
+                    @Override
+                    public synchronized boolean ping() {
+                        return false;
+                    }
+                }
+        );
+
+        try {
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(1), () -> {
+                assertThrows(ExternalProcessWorkerBorrowTimeoutException.class, pool::borrowWorker);
+            });
+        } finally {
+            pool.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should unblock waiting borrow after pool shutdown")
+    void shouldUnblockWaitingBorrowAfterPoolShutdown() throws Exception {
+        MutableWorker worker = new MutableWorker();
+        ExternalProcessWorkerPool pool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> worker
+        );
+
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        try {
+            ExternalProcessWorkerClient borrowed = pool.borrowWorker();
+
+            Future<?> waiting = executorService.submit(() -> {
+                assertThrows(IllegalStateException.class, pool::borrowWorker);
+            });
+
+            Thread.sleep(50L);
+            pool.shutdown();
+
+            assertTimeoutPreemptively(java.time.Duration.ofSeconds(2), () -> {
+                waiting.get(2, TimeUnit.SECONDS);
+            });
+
+            pool.returnWorker(borrowed);
+        } finally {
+            executorService.shutdownNow();
             pool.shutdown();
         }
     }
