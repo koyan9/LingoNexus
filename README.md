@@ -168,6 +168,8 @@ ScriptResult result = engine.execute(
 
 `EXTERNAL_PROCESS` currently works best with JSON-safe variables, metadata, and result values.
 
+If external workers are saturated, set `lingonexus.sandbox.external-process-borrow-timeout-ms` to cap borrow wait time (defaults to `timeout-ms`; set `0` to disable the cap).
+
 ## Built-in Modules
 
 | Module | Examples |
@@ -197,6 +199,19 @@ The public executor surface also exposes:
 
 - `engine.getStatistics()` for aggregated execution counters
 - `engine.getDiagnostics()` for cache, thread-pool, and worker-pool state
+
+When external-process payload compatibility fails, `ScriptResult.metadata` may include structured diagnostics:
+`errorPath`, `errorValueType`, and `errorDetailReason`.
+
+External-process failures are classified using stable `errorReason` codes such as
+`worker_borrow_timeout`, `worker_startup_failed`, `worker_borrow_interrupted`, and `worker_execution_timeout`.
+
+## Performance Snapshot (2026-03-10)
+
+- External-process reuse: cold 808 ms, repeated avg 2.00 ms (executor cache hits 20, misses 1)
+- Isolation mode comparison (repeated avg): DIRECT 0.35 ms, ISOLATED_THREAD 0.50 ms, EXTERNAL_PROCESS 1.75 ms
+- Large-context comparison (repeated avg): DIRECT 0.50 ms, ISOLATED_THREAD 0.80 ms, EXTERNAL_PROCESS 3.70 ms
+- Detailed notes: `docs/performance-baseline.md` (environment-specific, use for trend comparison)
 
 ## Examples
 

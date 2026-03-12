@@ -4,7 +4,9 @@ target/
 .flattened-pom.xml
 
 # Generated benchmark reports
-docs/performance-reports/
+docs/performance-reports/*
+!docs/performance-reports/
+!docs/performance-reports/INDEX.md
 
 # IDE / local editor files
 .idea/

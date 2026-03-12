@@ -43,6 +43,14 @@
 - Removed local verification repositories, build outputs, generated performance reports, temporary logs, IDE directories, and other machine-specific artifacts from the working tree before commit preparation.
 - Reduced `docs/` to the core documentation set needed for onboarding, architecture understanding, troubleshooting, and planned follow-up work.
 
+## Appendix: Performance Baseline Snapshot (2026-03-10)
+
+- Reference: `docs/performance-baseline.md`
+- External-process reuse: cold 808 ms, repeated avg 2.00 ms, executor cache hits 20, misses 1
+- Isolation mode comparison (repeated avg): DIRECT 0.35 ms, ISOLATED_THREAD 0.50 ms, EXTERNAL_PROCESS 1.75 ms
+- Large-context comparison (repeated avg): DIRECT 0.50 ms, ISOLATED_THREAD 0.80 ms, EXTERNAL_PROCESS 3.70 ms
+- Note: values are environment-specific and intended for trend comparison only
+
 ## Notes
 
 - This release/update is primarily a repository import, cleanup, and developer-experience baseline rather than a single runtime feature drop.

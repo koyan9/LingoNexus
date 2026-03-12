@@ -1,6 +1,6 @@
 # Diagnostics API
 
-> Updated: 2026-03-08  
+> Updated: 2026-03-10  
 > Doc navigation: `docs/INDEX.md`  
 > Architecture baseline: `docs/architecture.md`  
 > Quick integration guide: `docs/quick-start.md`
@@ -67,14 +67,21 @@ When external-process execution fails, `ScriptResult.metadata` may now include `
 - `request_payload_not_json_safe`
 - `security_policy_not_external_process_compatible`
 - `security_policy_descriptor_not_json_safe`
+- `security_policy_descriptor_load_failed`
 - `script_module_not_external_process_compatible`
 - `script_module_descriptor_not_json_safe`
+- `script_module_descriptor_load_failed`
+- `response_payload_not_json_safe`
+- `external_process_compatibility_failure`
 - `protocol_handshake_failed`
 - `protocol_capability_mismatch`
 - `serializer_contract_mismatch`
+- `protocol_negotiation_failure`
 - `worker_execution_timeout`
 - `worker_startup_failed`
+- `worker_borrow_timeout`
 - `worker_borrow_interrupted`
+- `worker_borrow_failed`
 - `worker_pool_shutdown`
 - `worker_unavailable`
 - `worker_execution_failed`
@@ -97,12 +104,14 @@ Typical signals:
 - `errorStage = request_validation`
 - `errorComponent = external-process-compatibility`
 - `errorReason = request_payload_not_json_safe`
+- `errorDetailReason = map_key_not_string` or `value_type_not_json_safe`
 
 Interpretation:
 
 - the request never reached real worker execution
 - the payload shape is incompatible with current JSON-safe transport rules
 - inspect the error message path such as `$.variables...` or `$.metadata...`
+- `errorPath`, `errorValueType`, and `errorDetailReason` provide structured diagnostics when JSON-safe validation fails
 
 Action:
 
@@ -115,7 +124,7 @@ Typical signals:
 
 - `errorStage = protocol_negotiation`
 - `errorComponent = external-worker-handshake`
-- `errorReason = protocol_handshake_failed`, `protocol_capability_mismatch`, or `serializer_contract_mismatch`
+- `errorReason = protocol_handshake_failed`, `protocol_capability_mismatch`, `serializer_contract_mismatch`, or `protocol_negotiation_failure`
 - diagnostics fields such as `latestProtocolNegotiationFailureReason`
 
 Interpretation:
@@ -135,7 +144,7 @@ Typical signals:
 
 - `errorStage = borrow_worker`
 - `errorComponent = external-worker-pool`
-- `errorReason = worker_startup_failed`, `worker_borrow_interrupted`, or `worker_pool_shutdown`
+- `errorReason = worker_startup_failed`, `worker_borrow_timeout`, `worker_borrow_interrupted`, `worker_borrow_failed`, or `worker_pool_shutdown`
 - diagnostics fields such as `latestBorrowFailureReason` and `failureReasonCounts`
 
 Interpretation:
@@ -146,8 +155,14 @@ Interpretation:
 Action:
 
 - check startup retry settings and local Java/classpath availability
+- `worker_borrow_timeout` indicates the pool hit its borrow wait limit (check `externalProcessBorrowTimeoutMs`, pool size, and worker health)
 - inspect whether the executor or worker pool was already shutting down
 - watch `startupFailureCount`, `healthCheckFailureCount`, and aggregated `failureReasonCounts`
+
+Quick distinction:
+
+- `worker_borrow_timeout`: pool is saturated or workers are unhealthy; increase pool size or fix worker health.
+- `worker_startup_failed`: new workers could not launch; check Java/classpath and startup retries.
 
 ### 4. Worker execution problem
 
@@ -155,17 +170,19 @@ Typical signals:
 
 - `errorStage = worker_execution`
 - `errorComponent = external-worker`
-- `errorReason = worker_execution_timeout`, `worker_unavailable`, `worker_execution_failed`, or `worker_terminated_unexpectedly`
+- `errorReason = worker_execution_timeout`, `worker_unavailable`, `worker_execution_failed`, `worker_terminated_unexpectedly`,
+  `security_policy_descriptor_load_failed`, `script_module_descriptor_load_failed`, or `response_payload_not_json_safe`
 - diagnostics fields such as `latestWorkerExecutionFailureReason`
 
 Interpretation:
 
-- the request made it past borrow/handshake, but execution inside the worker failed or the worker became unusable
+- the request made it past borrow/handshake, but worker-side execution or extension reconstruction failed
 
 Action:
 
 - distinguish timeout from crash/unavailability first
 - check whether discard count increased after the failure
+- confirm custom security policies and modules can be reconstructed on the worker classpath
 - use `failureReasonCounts` to see whether this is a recurring class of problem
 
 ### 5. How to use aggregated counts
@@ -175,6 +192,7 @@ Action:
 - if one reason dominates, investigate that class first
 - if counts are spread across many reasons, suspect broader environment instability or mixed misconfiguration
 - if only the latest reason changes but counts stay low, the issue may be transient rather than systemic
+- if the map includes `failure_reason_overflow`, it means unique reasons exceeded the tracking cap (128); use it as a signal to inspect logs for rare or highly variable failures
 
 ## Related Configuration
 
@@ -184,6 +202,7 @@ In external-process mode, the following sandbox settings now affect runtime beha
 - `externalProcessStartupRetries`
 - `externalProcessPrewarmCount`
 - `externalProcessIdleTtlMs`
+- `externalProcessBorrowTimeoutMs`
 - `externalProcessExecutorCacheMaxSize`
 - `externalProcessExecutorCacheIdleTtlMs`
 
@@ -222,11 +241,14 @@ Spring Boot starter binding now also supports YAML-style configuration such as:
 - Diagnostics are snapshots, not streaming metrics.
 - External worker statistics are most relevant when `isolationMode` is `EXTERNAL_PROCESS`.
 - Values may change quickly under concurrent load.
+- Worker-side failures returned in responses also contribute to `failureReasonCounts` and latest failure reason tracking.
 - Worker handshake data is now available from the first successful worker borrow because new workers perform an eager health-check before entering the reusable pool.
+- JSON-safe compatibility failures may include `errorPath`, `errorValueType`, and `errorDetailReason` for structured payload diagnostics.
 - For `DIRECT` and `ISOLATED_THREAD` executors that never touch external isolation, external statistics remain a zero-state snapshot until the external runtime is actually initialized.
 - `basic` keeps core result metadata such as script engine, isolation mode, cache-hit, and error basics.
 - `timing` adds compile/execution/queue/wall/total timing fields but still suppresses thread/module/diagnostic-detail fields.
 - `full` adds the remaining diagnostic fields such as thread info, modules used, security-check count, and detailed error stage/component metadata.
+- `errorStage` / `errorComponent` / `errorReason` are emitted only when `ERROR_DIAGNOSTICS` is enabled (explicitly or via `full`).
 - Category masks override profiles when both are provided and allow combinations such as timing-only, module-only, or error-diagnostics-only output.
 - Named policies are preset mappings layered above profiles and masks: `minimal -> basic`, `timing -> timing`, `debug -> full`.
 - Custom policy templates can inherit from built-in named policies or other custom templates; request-level named overrides are normalized to category masks before external-process dispatch so worker-side execution stays consistent.

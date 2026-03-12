@@ -479,26 +479,33 @@ sequenceDiagram
 | Phase 5 | P2 | 形成性能基线 | 对 `DIRECT`、`ISOLATED_THREAD`、`EXTERNAL_PROCESS` 建立统一 benchmark 与记录模板 |
 | Phase 6 | P3 | 长期硬化 | 评估二进制协议、worker idle scaling、OS 级 sandbox hardening |
 
+当前执行计划以里程碑 M1–M4 管理，建议映射关系如下：
+
+- M1：Phase 1 + Phase 2（外部进程可用性/稳定性与测试）
+- M2：Phase 3（诊断与可观测性）
+- M3：Phase 4（热路径优化）
+- M4：Phase 5 + Phase 6（性能基线 + 长期硬化）
+
 ### 10.3 更具体的近期任务清单
 
 建议优先按下面顺序推进：
 
-1. **外部进程兼容性补强**
+1. **M1：外部进程兼容性补强**
    - 增加更严格的 JSON-safe compatibility check。
    - 改进 `ExternalProcessCompatibilityException` 的错误分类与可读性。
    - 明确模块 descriptor 与安全策略 descriptor 的兼容边界。
 
-2. **外部进程恢复能力测试**
+2. **M1：外部进程恢复能力测试**
    - 增加 worker reuse 测试。
    - 增加 timeout 后 worker replacement 测试。
    - 增加 health-check failure recovery 测试。
    - 增加 external-process failure metadata 测试。
 
-3. **诊断与文档补齐**
+3. **M2：诊断与文档补齐**
    - 编写如何读取 `EngineDiagnostics` / `ExternalProcessStatistics` 的样例。
    - 增加协议协商失败的最近原因聚合，而不是只有累计计数。
 
-4. **执行热路径优化**
+4. **M3：执行热路径优化**
    - 评估 request metadata 复制成本。
    - 拆分必须 metadata 与可选 diagnostics metadata。
    - 进一步减少 direct path 上的瞬时对象分配。

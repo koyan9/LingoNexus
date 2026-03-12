@@ -168,6 +168,8 @@ ScriptResult result = engine.execute(
 
 当前 `EXTERNAL_PROCESS` 最适合 JSON-safe 的变量、metadata 和结果值。
 
+如果需要限制 worker 借用等待时间，可配置 `lingonexus.sandbox.external-process-borrow-timeout-ms`（默认跟随 `timeout-ms`；设为 `0` 表示不限制）。
+
 ## 内置模块
 
 | 模块 | 示例能力 |
@@ -197,6 +199,19 @@ ScriptResult result = engine.execute(
 
 - `engine.getStatistics()`：获取聚合执行统计
 - `engine.getDiagnostics()`：获取缓存、线程池、worker 池等运行时诊断信息
+
+当外部进程的 payload 兼容性校验失败时，`ScriptResult.metadata` 可能包含结构化诊断字段：
+`errorPath`、`errorValueType`、`errorDetailReason`。
+
+外部进程失败会产生稳定的 `errorReason` 码，例如
+`worker_borrow_timeout`、`worker_startup_failed`、`worker_borrow_interrupted`、`worker_execution_timeout`。
+
+## 性能快照（2026-03-10）
+
+- 外部进程复用：冷启动 808 ms，重复均值 2.00 ms（executor cache hits 20，misses 1）
+- 隔离模式对比（重复均值）：DIRECT 0.35 ms，ISOLATED_THREAD 0.50 ms，EXTERNAL_PROCESS 1.75 ms
+- 大上下文对比（重复均值）：DIRECT 0.50 ms，ISOLATED_THREAD 0.80 ms，EXTERNAL_PROCESS 3.70 ms
+- 详细说明：`docs/performance-baseline.md`（与环境相关，用于趋势对比）
 
 ## 示例代码
 

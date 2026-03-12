@@ -169,6 +169,8 @@ lingonexus:
     external-process-startup-retries: 2
     external-process-prewarm-count: 1
     external-process-idle-ttl-ms: 300000
+    external-process-borrow-timeout-ms: 5000
+    # borrow-timeout-ms: 0 means wait indefinitely
 ```
 
 ### 4.2 代码中切换

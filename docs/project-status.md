@@ -1,4 +1,4 @@
-# LingoNexus Project Status (2026-03-09)
+# LingoNexus Project Status (2026-03-10)
 
 > Purpose: current implementation snapshot, replacing the old build-out status draft.
 
@@ -57,11 +57,13 @@ Approximate snapshot metrics from the current tree:
 - 5 script language submodules
 - 2 testcase submodules
 - 6 example classes
-- about 88 testcase classes under `lingonexus-testcase`
+- about 99 testcase classes under `lingonexus-testcase`
 - about 73 main Java files under `lingonexus-api`
 - about 32 main Java files under `lingonexus-core`
 
-These are point-in-time numbers for 2026-03-08 and may change later.
+These are point-in-time numbers for 2026-03-10 and may change later.
+
+Latest performance baseline snapshot is recorded in `docs/performance-baseline.md` (2026-03-10).
 
 ## Current Risks and Constraints
 
@@ -99,16 +101,17 @@ This drift is being removed, but it remains a maintenance risk if not kept in sy
 
 ## Best Next Steps
 
-Recommended priority order:
+Recommended milestone order (aligned with `docs/todo-plan.md`):
 
-1. continue external-process compatibility expansion beyond the current JSON-safe and descriptor-focused coverage
-2. continue worker reuse / timeout replacement / health-check recovery hardening under broader scenarios
-3. build stronger performance baselines, including Janino cache-identity scenarios
-4. reduce hot-path allocation optimization in direct execution
-5. turn diagnostics signals into more operator-oriented guidance and reporting patterns
+1. M1: external-process compatibility + worker-side failure metadata stability
+2. M2: diagnostics examples and operator guidance
+3. M3: direct-path metadata allocation reduction
+4. M4: performance baseline expansion and longer-horizon worker hardening
+
+Progress note (2026-03-10): M1 regression coverage now includes worker-pool shutdown/eviction behavior and protocol negotiation mismatch cases; remaining focus is broader request/worker boundary metadata and recovery edge cases.
 
 ## Status Conclusion
 
-As of 2026-03-08, LingoNexus is best described as:
+As of 2026-03-10, LingoNexus is best described as:
 
 **a functioning script engine with a stable architecture, active external-process hardening work, and documentation that is being aligned with the real implementation.**

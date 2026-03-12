@@ -1,6 +1,6 @@
 # LingoNexus Documentation Index
 
-> Updated: 2026-03-09  
+> Updated: 2026-03-10  
 > Purpose: provide a single navigation page for the current documentation set.
 
 ## Start Here
@@ -37,8 +37,13 @@ If you are new to the repository, read in this order:
 | --- | --- |
 | `docs/project-status.md` | subsystem maturity snapshot, current risks, and latest implementation posture |
 | `docs/internal-assessment-2026-03-09.md` | internal assessment of current product fit, technical maturity, risks, and next actions |
-| `docs/milestone-v0.1.1.md` | issue-ready milestone checklist for the `v0.1.1` patch release |
+| `docs/milestone-m1-external-process-stability.md` | current P0 stability milestone |
+| `docs/milestone-m2-diagnostics-clarity.md` | diagnostics examples and operator guidance milestone |
+| `docs/milestone-m3-hot-path-optimization.md` | direct-path optimization milestone |
+| `docs/milestone-m4-performance-hardening.md` | performance baseline and hardening milestone |
+| `docs/milestone-v0.1.1.md` | legacy patch milestone reference |
 | `docs/release-notes-2026-03-09.md` | draft release/update summary for the current repository import and cleanup wave |
+| `docs/external-summary-2026-03-10.md` | short external-facing summary with latest performance snapshot |
 | `docs/todo-plan.md` | follow-up roadmap and prioritized tasks |
 
 ## Performance and Optimization
@@ -46,6 +51,7 @@ If you are new to the repository, read in this order:
 | File | Purpose |
 | --- | --- |
 | `docs/performance-baseline.md` | current benchmark focus and baseline notes, including Janino cache-identity baselines |
+| `docs/performance-reports/INDEX.md` | how to generate and find the latest performance reports |
 | `scripts/run-performance-baselines.ps1` | runs selected baseline tests and generates local/CI performance reports on demand |
 
 ## Which Docs Are Source-of-Truth?

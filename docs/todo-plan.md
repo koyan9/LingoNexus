@@ -1,86 +1,82 @@
 # TODO Plan
 
-> Updated: 2026-03-09  
-> Purpose: define the next development steps after the first complete repository baseline.
+> Updated: 2026-03-10  
+> Purpose: define the next development steps after the current baseline.
 
 ## Current Position
 
-The repository now has a stable baseline:
+The repository already provides a stable baseline:
 
 - core runtime is present
 - language sandboxes are present
 - Spring Boot integration is present
 - Windows-friendly verification tooling is present
-- public docs have been reduced to the core reader path
+- public docs are aligned to the core reader path
 
-The next step is not broad expansion. It is **stabilization first**, followed by measured capability growth.
+The next phase focuses on **stabilization first**, followed by measured capability growth.
 
-## `v0.1.1` Patch Target
+## Milestone Overview
 
-Goal: stabilize the current baseline without changing public usage patterns.
+| Milestone | Priority | Goal | Reference |
+| --- | --- | --- | --- |
+| M1 External-Process Stability | P0 | tighten compatibility and ensure failure metadata stays stable across request/worker boundaries | `docs/milestone-m1-external-process-stability.md` |
+| M2 Diagnostics Clarity | P1 | improve operator-facing diagnostics examples and interpretation guidance | `docs/milestone-m2-diagnostics-clarity.md` |
+| M3 Hot-Path Optimization | P1 | reduce direct-path metadata allocation and preparation overhead | `docs/milestone-m3-hot-path-optimization.md` |
+| M4 Performance + Hardening | P2 | extend baseline comparisons and document longer-horizon hardening targets | `docs/milestone-m4-performance-hardening.md` |
 
-Detailed issue-ready breakdown: `docs/milestone-v0.1.1.md`
+## M1 External-Process Stability (P0)
 
-### In Scope
+Goal: stabilize `EXTERNAL_PROCESS` behavior without changing public usage patterns.
 
-- tighten `EXTERNAL_PROCESS` compatibility edge cases and error readability
-- verify structured failure metadata remains stable across request/worker boundary scenarios
-- improve diagnostics examples and small metadata/documentation gaps
-- continue hardening `scripts/verified-build.ps1` and related preset/help/doc refresh paths
-- keep `README.md`, `README.zh-CN.md`, `docs/INDEX.md`, and build docs aligned with the implemented workflow
+In scope:
 
-### Candidate Tasks
+- compatibility and error readability improvements
+- worker-side reconstruction failure classification
+- focused regression tests on `errorStage` / `errorComponent` / `errorReason`
 
-- add small compatibility fixes for request/response JSON-safe boundary handling
-- strengthen custom `SecurityPolicy` / `ScriptModule` incompatibility messages where needed
-- add a few more focused tests around external-process failure metadata stability
-- improve operator-facing examples for `EngineDiagnostics` and `ExternalProcessStatistics`
-- clean any remaining small wording drift in onboarding/build docs
+Issue drafts:
 
-### Out of Scope
+- `.github/issue-drafts/m1/01-external-process-compatibility-polish.md`
+- `.github/issue-drafts/m1/02-worker-side-compatibility-metadata.md`
+
+Out of scope:
 
 - new language support
-- public API redesign
-- transport protocol replacement
+- transport protocol redesign
 - large performance refactors
-- major Spring Boot feature expansion
 
-## `v0.2.0` Capability Target
+Progress note (2026-03-10): M1 regression coverage now includes worker-pool shutdown/eviction, protocol negotiation mismatch, and descriptor JSON-safe failure cases; remaining focus is broader request/worker boundary metadata and recovery edge cases.
 
-Goal: expand core runtime capability without breaking the baseline.
+## M2 Diagnostics Clarity (P1)
 
-### Focus Areas
+Goal: make runtime diagnostics easier to apply in operator workflows.
 
-- broaden `EXTERNAL_PROCESS` compatibility beyond the current descriptor-focused and JSON-safe-heavy path
-- strengthen worker reuse / replacement / health-check recovery under broader scenarios
-- improve operator-oriented diagnostics and failure interpretation
-- reduce hot-path metadata allocation cost in direct execution
-- formalize comparative performance baselines across isolation modes
+Issue drafts:
 
-### Candidate Tasks
+- `.github/issue-drafts/m2/01-diagnostics-examples-refresh.md`
 
-- add structured pre-dispatch checks for more unsupported payload categories
-- improve external worker recovery diagnostics and replacement visibility
-- separate required result metadata from optional diagnostics metadata where useful
-- extend Janino cache-identity and isolation-mode baseline coverage
+## M3 Hot-Path Optimization (P1)
 
-## `v0.3.0` Maturity Target
+Goal: reduce avoidable allocations on the direct execution path.
 
-Goal: move from a good developer baseline to a stronger operational baseline.
+Issue drafts:
 
-### Focus Areas
+- `.github/issue-drafts/m3/01-direct-path-metadata-allocation.md`
 
-- evaluate protocol-layer improvements for external-process transport
-- evaluate stronger worker lifecycle and scaling behavior
-- improve production-facing guidance for Spring Boot and operator scenarios
-- strengthen benchmark/report workflows and longer-running stress validation
+## M4 Performance + Hardening (P2)
 
-### Candidate Tasks
+Goal: extend baseline comparisons and record longer-horizon hardening targets.
 
-- evaluate binary-safe transport options such as CBOR
-- evaluate configurable worker prewarm / idle scaling strategies
-- expand stress/performance comparisons across more real-world workloads
-- improve release/process documentation for future version cadence
+Issue drafts:
+
+- `.github/issue-drafts/m4/01-performance-baseline-extension.md`
+
+## Legacy Reference
+
+The earlier versioned patch-plan is kept for historical context:
+
+- `docs/milestone-v0.1.1.md`
+- `.github/issue-drafts/v0.1.1/`
 
 ## Ongoing Rule
 
