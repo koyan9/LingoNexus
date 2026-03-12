@@ -34,10 +34,17 @@ public final class ExternalProcessExtensionSupport {
     }
 
     public static ExternalProcessExtensionDescriptor createDescriptor(Object extension) {
+        return createDescriptor(extension, "$");
+    }
+
+    public static ExternalProcessExtensionDescriptor createDescriptor(Object extension, String path) {
         Map<String, Object> descriptor = Collections.emptyMap();
         if (extension instanceof ExternalProcessDescriptorProvider) {
             Map<String, Object> raw = ((ExternalProcessDescriptorProvider) extension).toExternalProcessDescriptor();
-            descriptor = raw != null ? JsonSafeValueNormalizer.normalizeMap(raw) : Collections.<String, Object>emptyMap();
+            String descriptorPath = path != null && !path.trim().isEmpty() ? path : "$";
+            descriptor = raw != null
+                    ? JsonSafeValueNormalizer.normalizeMap(raw, descriptorPath, false)
+                    : Collections.<String, Object>emptyMap();
         }
         return new ExternalProcessExtensionDescriptor(extension.getClass().getName(), descriptor);
     }

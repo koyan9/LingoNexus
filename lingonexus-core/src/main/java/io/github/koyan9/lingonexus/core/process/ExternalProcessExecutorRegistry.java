@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.koyan9.lingonexus.api.config.CacheConfig;
 import io.github.koyan9.lingonexus.api.config.LingoNexusConfig;
 import io.github.koyan9.lingonexus.api.config.SandboxConfig;
+import io.github.koyan9.lingonexus.api.exception.ExternalProcessCompatibilityException;
 import io.github.koyan9.lingonexus.api.executor.isolation.ExecutionIsolationMode;
 import io.github.koyan9.lingonexus.api.facade.LingoNexusExecutor;
 import io.github.koyan9.lingonexus.api.lang.ScriptLanguage;
@@ -44,6 +45,10 @@ public final class ExternalProcessExecutorRegistry {
 
     private static final int SIGNATURE_CAPACITY = 32;
     private static final int DESCRIPTOR_ENTRY_CAPACITY = 4;
+    private static final String STAGE_WORKER_EXECUTION = "worker_execution";
+    private static final String COMPONENT_EXTERNAL_WORKER = "external-worker";
+    private static final String REASON_SECURITY_POLICY_DESCRIPTOR_LOAD_FAILED = "security_policy_descriptor_load_failed";
+    private static final String REASON_SCRIPT_MODULE_DESCRIPTOR_LOAD_FAILED = "script_module_descriptor_load_failed";
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final LinkedHashMap<String, CachedExecutorEntry> EXECUTORS = new LinkedHashMap<String, CachedExecutorEntry>(16, 0.75f, true);
     private static final AtomicLong cacheHits = new AtomicLong(0);
@@ -166,7 +171,15 @@ public final class ExternalProcessExecutorRegistry {
         List<ExternalProcessExtensionDescriptor> customSecurityPolicyDescriptors = defaultDescriptors(request.getCustomSecurityPolicies());
         List<SecurityPolicy> customPolicies = new ArrayList<SecurityPolicy>(customSecurityPolicyDescriptors.size());
         for (ExternalProcessExtensionDescriptor descriptor : customSecurityPolicyDescriptors) {
-            customPolicies.add(ExternalProcessExtensionSupport.instantiate(descriptor, SecurityPolicy.class));
+            try {
+                customPolicies.add(ExternalProcessExtensionSupport.instantiate(descriptor, SecurityPolicy.class));
+            } catch (RuntimeException e) {
+                throw compatibilityFailure(
+                        "EXTERNAL_PROCESS failed to reconstruct SecurityPolicy " + descriptor.getClassName(),
+                        e,
+                        REASON_SECURITY_POLICY_DESCRIPTOR_LOAD_FAILED
+                );
+            }
         }
 
         LingoNexusConfig config = LingoNexusConfig.builder()
@@ -209,9 +222,51 @@ public final class ExternalProcessExecutorRegistry {
 
         LingoNexusExecutor executor = LingoNexusBuilder.createNewInstance(config);
         for (ExternalProcessExtensionDescriptor descriptor : defaultDescriptors(request.getDynamicModules())) {
-            executor.registerModule(ExternalProcessExtensionSupport.instantiate(descriptor, ScriptModule.class));
+            try {
+                executor.registerModule(ExternalProcessExtensionSupport.instantiate(descriptor, ScriptModule.class));
+            } catch (RuntimeException e) {
+                throw compatibilityFailure(
+                        "EXTERNAL_PROCESS failed to reconstruct ScriptModule " + descriptor.getClassName(),
+                        e,
+                        REASON_SCRIPT_MODULE_DESCRIPTOR_LOAD_FAILED
+                );
+            }
         }
         return executor;
+    }
+
+    private static ExternalProcessCompatibilityException compatibilityFailure(String message,
+                                                                              RuntimeException cause,
+                                                                              String reason) {
+        String finalMessage = message;
+        if (cause != null) {
+            String causeMessage = cause.getMessage();
+            String rootMessage = null;
+            Throwable cursor = cause;
+            while (cursor != null) {
+                String candidate = cursor.getMessage();
+                if (candidate != null && !candidate.trim().isEmpty()) {
+                    rootMessage = candidate;
+                }
+                cursor = cursor.getCause();
+            }
+            if (causeMessage != null && !causeMessage.trim().isEmpty()) {
+                finalMessage = message + ": " + causeMessage;
+                if (rootMessage != null && !rootMessage.trim().isEmpty()
+                        && (causeMessage == null || !causeMessage.contains(rootMessage))) {
+                    finalMessage = finalMessage + " (" + rootMessage + ")";
+                }
+            } else if (rootMessage != null && !rootMessage.trim().isEmpty()) {
+                finalMessage = message + ": " + rootMessage;
+            }
+        }
+        return new ExternalProcessCompatibilityException(
+                finalMessage,
+                cause,
+                STAGE_WORKER_EXECUTION,
+                COMPONENT_EXTERNAL_WORKER,
+                reason
+        );
     }
 
     private static List<Map<String, Object>> normalizeDescriptors(List<ExternalProcessExtensionDescriptor> descriptors) {

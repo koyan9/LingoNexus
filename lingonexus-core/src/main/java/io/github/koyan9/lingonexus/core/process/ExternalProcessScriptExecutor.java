@@ -47,23 +47,32 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     private static final String COMPONENT_EXTERNAL_WORKER_HANDSHAKE = "external-worker-handshake";
     private static final String COMPONENT_EXTERNAL_WORKER_POOL = "external-worker-pool";
     private static final String COMPONENT_EXTERNAL_WORKER = "external-worker";
+    private static final int MAX_FAILURE_REASON_KEYS = 128;
+    private static final String FAILURE_REASON_OVERFLOW_KEY = "failure_reason_overflow";
 
     private final ExternalProcessWorkerPool workerPool;
     private final AtomicLong protocolNegotiationFailureCount = new AtomicLong(0L);
     private final ConcurrentHashMap<String, AtomicLong> failureReasonCounts = new ConcurrentHashMap<String, AtomicLong>();
+    private final AtomicLong failureReasonOverflowCount = new AtomicLong(0L);
     private volatile Map<String, Long> lastExecutorCacheStatistics = Collections.emptyMap();
     private volatile String latestProtocolNegotiationFailureReason;
     private volatile String latestBorrowFailureReason;
     private volatile String latestWorkerExecutionFailureReason;
 
     public ExternalProcessScriptExecutor(int poolSize, int startupRetries, int prewarmCount, long idleTtlMs) {
+        this(poolSize, startupRetries, prewarmCount, idleTtlMs, 0L);
+    }
+
+    public ExternalProcessScriptExecutor(int poolSize, int startupRetries, int prewarmCount, long idleTtlMs,
+                                         long borrowTimeoutMs) {
         this.workerPool = new ExternalProcessWorkerPool(
                 resolveJavaCommand(),
                 resolveClasspath(),
                 poolSize,
                 startupRetries,
                 prewarmCount,
-                idleTtlMs
+                idleTtlMs,
+                borrowTimeoutMs
         );
     }
 
@@ -79,6 +88,7 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
             validateNegotiatedTransport(worker, request);
             ExternalProcessExecutionResponse response = worker.execute(request, timeoutMs);
             updateExecutorCacheStatistics(response);
+            recordWorkerResponseFailure(response);
             workerPool.returnWorker(worker);
             return toScriptResult(response);
         } catch (ClassifiedCompatibilityException e) {
@@ -199,12 +209,17 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     }
 
     public Map<String, Long> getFailureReasonCounts() {
-        if (failureReasonCounts.isEmpty()) {
+        long overflowCount = failureReasonOverflowCount.get();
+        if (failureReasonCounts.isEmpty() && overflowCount <= 0L) {
             return Collections.emptyMap();
         }
-        Map<String, Long> snapshot = new LinkedHashMap<String, Long>(failureReasonCounts.size());
+        int capacity = failureReasonCounts.size() + (overflowCount > 0L ? 1 : 0);
+        Map<String, Long> snapshot = new LinkedHashMap<String, Long>(capacity);
         for (Map.Entry<String, AtomicLong> entry : failureReasonCounts.entrySet()) {
             snapshot.put(entry.getKey(), entry.getValue().get());
+        }
+        if (overflowCount > 0L) {
+            snapshot.put(FAILURE_REASON_OVERFLOW_KEY, overflowCount);
         }
         return snapshot;
     }
@@ -298,17 +313,41 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
         return metadata.isEmpty() ? new HashMap<String, Object>() : metadata;
     }
 
+    private void recordWorkerResponseFailure(ExternalProcessExecutionResponse response) {
+        if (response == null || response.isSuccess()) {
+            return;
+        }
+        Map<String, Object> metadata = response.getMetadata();
+        if (metadata == null || metadata.isEmpty()) {
+            return;
+        }
+        Object reason = metadata.get(ResultMetadataKeys.ERROR_REASON);
+        if (reason == null) {
+            return;
+        }
+        String reasonText = String.valueOf(reason);
+        if (reasonText.trim().isEmpty()) {
+            return;
+        }
+        Object stage = metadata.get(ResultMetadataKeys.ERROR_STAGE);
+        String stageText = stage != null ? String.valueOf(stage) : null;
+        if (stageText == null || STAGE_WORKER_EXECUTION.equals(stageText)) {
+            latestWorkerExecutionFailureReason = reasonText;
+        }
+        recordFailureReason(reasonText);
+    }
+
     private void validateJsonSafeRequest(ExternalProcessExecutionRequest request) throws IOException {
         try {
-            if (request.getVariables() != null) {
+            if (request.getVariables() != null && !JsonSafeValueNormalizer.isNormalizedMap(request.getVariables())) {
                 JsonSafeValueNormalizer.normalizeMap(request.getVariables(), "$.variables", false);
             }
-            if (request.getMetadata() != null) {
+            if (request.getMetadata() != null && !JsonSafeValueNormalizer.isNormalizedMap(request.getMetadata())) {
                 JsonSafeValueNormalizer.normalizeMap(request.getMetadata(), "$.metadata", false);
             }
         } catch (IllegalArgumentException e) {
             throw new ClassifiedCompatibilityException(
-                    "External process mode requires JSON-safe request payload: " + e.getMessage(),
+                    "EXTERNAL_PROCESS requires JSON-safe request payload: " + e.getMessage(),
                     e,
                     STAGE_REQUEST_VALIDATION,
                     COMPONENT_EXTERNAL_PROCESS_COMPATIBILITY,
@@ -325,6 +364,7 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
         metadata.put(ResultMetadataKeys.ERROR_STAGE, stage);
         metadata.put(ResultMetadataKeys.ERROR_COMPONENT, component);
         metadata.put(ResultMetadataKeys.ERROR_REASON, reason);
+        populateJsonSafeDiagnostics(metadata, e);
         return ScriptResult.of(status, null, e.getMessage(), null, executionTime, metadata);
     }
 
@@ -343,6 +383,9 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
     private String classifyBorrowFailureReason(Exception e) {
         if (e instanceof InterruptedException) {
             return "worker_borrow_interrupted";
+        }
+        if (e instanceof ExternalProcessWorkerBorrowTimeoutException) {
+            return "worker_borrow_timeout";
         }
         if (e instanceof IOException) {
             return "worker_startup_failed";
@@ -375,7 +418,33 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
         if (reason == null || reason.trim().isEmpty()) {
             return;
         }
-        failureReasonCounts.computeIfAbsent(reason, key -> new AtomicLong(0L)).incrementAndGet();
+        String normalized = reason.trim();
+        AtomicLong counter = failureReasonCounts.get(normalized);
+        if (counter != null) {
+            counter.incrementAndGet();
+            return;
+        }
+        if (failureReasonCounts.size() >= MAX_FAILURE_REASON_KEYS) {
+            failureReasonOverflowCount.incrementAndGet();
+            return;
+        }
+        failureReasonCounts.computeIfAbsent(normalized, key -> new AtomicLong(0L)).incrementAndGet();
+    }
+
+    private void populateJsonSafeDiagnostics(Map<String, Object> metadata, Throwable error) {
+        JsonSafeValueException jsonSafeFailure = JsonSafeValueException.find(error);
+        if (jsonSafeFailure == null) {
+            return;
+        }
+        if (jsonSafeFailure.getPath() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_PATH, jsonSafeFailure.getPath());
+        }
+        if (jsonSafeFailure.getValueType() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_VALUE_TYPE, jsonSafeFailure.getValueType());
+        }
+        if (jsonSafeFailure.getDetailReason() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_DETAIL_REASON, jsonSafeFailure.getDetailReason());
+        }
     }
 
     private static final class ClassifiedCompatibilityException extends ExternalProcessCompatibilityException {

@@ -21,6 +21,7 @@ import io.github.koyan9.lingonexus.api.config.LingoNexusConfig;
 import io.github.koyan9.lingonexus.api.config.SandboxConfig;
 import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.executor.isolation.ExecutionIsolationMode;
+import io.github.koyan9.lingonexus.api.exception.ExternalProcessCompatibilityException;
 import io.github.koyan9.lingonexus.api.facade.LingoNexusExecutor;
 import io.github.koyan9.lingonexus.api.lang.ScriptLanguage;
 import io.github.koyan9.lingonexus.api.module.spi.ScriptModule;
@@ -29,6 +30,8 @@ import io.github.koyan9.lingonexus.api.process.ExternalProcessDescriptorConsumer
 import io.github.koyan9.lingonexus.api.result.ScriptResult;
 import io.github.koyan9.lingonexus.api.security.SecurityPolicy;
 import io.github.koyan9.lingonexus.core.LingoNexusBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -51,6 +54,8 @@ import java.net.SocketException;
  */
 public final class ExternalProcessWorkerMain {
 
+    private static final Logger log = LoggerFactory.getLogger(ExternalProcessWorkerMain.class);
+
     private ExternalProcessWorkerMain() {
     }
 
@@ -72,12 +77,19 @@ public final class ExternalProcessWorkerMain {
             ExternalProcessExecutionRequest request = readRequest(requestFile);
             response = executeRequest(request);
         } catch (Exception e) {
+            log.error("Failed to execute external process request", e);
+            Map<String, Object> errorMetadata = buildGenericFailureMetadata(
+                    e,
+                    "worker_execution",
+                    "external-worker",
+                    "worker_execution_failed"
+            );
             response = new ExternalProcessExecutionResponse(
                     false,
                     "FAILURE",
                     null,
                     e.getMessage(),
-                    Collections.<String, Object>emptyMap(),
+                    errorMetadata,
                     0L,
                     ExternalProcessExecutorRegistry.getStatistics()
             );
@@ -86,7 +98,7 @@ public final class ExternalProcessWorkerMain {
         try {
             writeResponse(responseFile, response);
         } catch (Exception e) {
-            e.printStackTrace(System.err);
+            log.error("Failed to write external process response", e);
             System.exit(1);
         }
     }
@@ -108,7 +120,7 @@ public final class ExternalProcessWorkerMain {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace(System.err);
+            log.error("External process socket server terminated unexpectedly", e);
             System.exit(1);
         } finally {
             ExternalProcessExecutorRegistry.shutdownAll();
@@ -140,49 +152,119 @@ public final class ExternalProcessWorkerMain {
             );
             ScriptResult result = executor.execute(request.getScript(), request.getLanguage(), context);
 
-            try {
-                Object normalizedValue = JsonSafeValueNormalizer.normalizeForResponse(result.getValue());
-                Map<String, Object> normalizedMetadata = result.getMetadata() != null
-                        ? JsonSafeValueNormalizer.normalizeMap(result.getMetadata(), "$.metadata", true)
-                        : Collections.<String, Object>emptyMap();
-
-                return new ExternalProcessExecutionResponse(
-                        result.isSuccess(),
-                        result.getStatus().name(),
-                        normalizedValue,
-                        result.getErrorMessage(),
-                        normalizedMetadata,
-                        result.getExecutionTime(),
-                        ExternalProcessExecutorRegistry.getStatistics()
-                );
-            } catch (IllegalArgumentException e) {
-                Map<String, Object> errorMetadata = new HashMap<String, Object>();
-                errorMetadata.put(ResultMetadataKeys.ERROR_TYPE, "ExternalProcessCompatibilityException");
-                errorMetadata.put(ResultMetadataKeys.ERROR_STAGE, "worker_execution");
-                errorMetadata.put(ResultMetadataKeys.ERROR_COMPONENT, "external-worker");
-                errorMetadata.put(ResultMetadataKeys.ERROR_REASON, "response_payload_not_json_safe");
-                errorMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, "External process mode requires response payload compatible with JSON transport: " + e.getMessage());
-                return new ExternalProcessExecutionResponse(
-                        false,
-                        "FAILURE",
-                        null,
-                        "External process mode requires response payload compatible with JSON transport: " + e.getMessage(),
-                        errorMetadata,
-                        result.getExecutionTime(),
-                        ExternalProcessExecutorRegistry.getStatistics()
-                );
-            }
-        } catch (Exception e) {
+            return buildExecutionResponse(result);
+        } catch (ExternalProcessCompatibilityException e) {
+            Map<String, Object> errorMetadata = new HashMap<String, Object>();
+            String stage = e.getStage() != null ? e.getStage() : "worker_execution";
+            String component = e.getComponent() != null ? e.getComponent() : "external-worker";
+            String reason = e.getReason() != null ? e.getReason() : "external_process_compatibility_failure";
+            errorMetadata.put(ResultMetadataKeys.ERROR_TYPE, "ExternalProcessCompatibilityException");
+            errorMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, e.getMessage());
+            errorMetadata.put(ResultMetadataKeys.ERROR_STAGE, stage);
+            errorMetadata.put(ResultMetadataKeys.ERROR_COMPONENT, component);
+            errorMetadata.put(ResultMetadataKeys.ERROR_REASON, reason);
             return new ExternalProcessExecutionResponse(
                     false,
                     "FAILURE",
                     null,
                     e.getMessage(),
+                    errorMetadata,
+                    0L,
+                    ExternalProcessExecutorRegistry.getStatistics()
+            );
+        } catch (Exception e) {
+            Map<String, Object> errorMetadata = buildGenericFailureMetadata(
+                    e,
+                    "worker_execution",
+                    "external-worker",
+                    "worker_execution_failed"
+            );
+            return new ExternalProcessExecutionResponse(
+                    false,
+                    "FAILURE",
+                    null,
+                    e.getMessage(),
+                    errorMetadata,
+                    0L,
+                    ExternalProcessExecutorRegistry.getStatistics()
+            );
+        }
+    }
+
+    static ExternalProcessExecutionResponse buildExecutionResponse(ScriptResult result) {
+        if (result == null) {
+            return new ExternalProcessExecutionResponse(
+                    false,
+                    "FAILURE",
+                    null,
+                    "External process response is null",
                     Collections.<String, Object>emptyMap(),
                     0L,
                     ExternalProcessExecutorRegistry.getStatistics()
             );
         }
+
+        try {
+            Object normalizedValue = JsonSafeValueNormalizer.normalizeForResponse(result.getValue());
+            Map<String, Object> normalizedMetadata = result.getMetadata() != null
+                    ? JsonSafeValueNormalizer.normalizeMap(result.getMetadata(), "$.metadata", true)
+                    : Collections.<String, Object>emptyMap();
+
+            return new ExternalProcessExecutionResponse(
+                    result.isSuccess(),
+                    result.getStatus().name(),
+                    normalizedValue,
+                    result.getErrorMessage(),
+                    normalizedMetadata,
+                    result.getExecutionTime(),
+                    ExternalProcessExecutorRegistry.getStatistics()
+            );
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorMetadata = new HashMap<String, Object>();
+            errorMetadata.put(ResultMetadataKeys.ERROR_TYPE, "ExternalProcessCompatibilityException");
+            errorMetadata.put(ResultMetadataKeys.ERROR_STAGE, "worker_execution");
+            errorMetadata.put(ResultMetadataKeys.ERROR_COMPONENT, "external-worker");
+            errorMetadata.put(ResultMetadataKeys.ERROR_REASON, "response_payload_not_json_safe");
+            String message = "EXTERNAL_PROCESS requires response payload compatible with JSON transport: " + e.getMessage();
+            errorMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, message);
+            populateJsonSafeDiagnostics(errorMetadata, e);
+            return new ExternalProcessExecutionResponse(
+                    false,
+                    "FAILURE",
+                    null,
+                    message,
+                    errorMetadata,
+                    result.getExecutionTime(),
+                    ExternalProcessExecutorRegistry.getStatistics()
+            );
+        }
+    }
+
+    private static void populateJsonSafeDiagnostics(Map<String, Object> metadata, Throwable error) {
+        JsonSafeValueException jsonSafeFailure = JsonSafeValueException.find(error);
+        if (jsonSafeFailure == null) {
+            return;
+        }
+        if (jsonSafeFailure.getPath() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_PATH, jsonSafeFailure.getPath());
+        }
+        if (jsonSafeFailure.getValueType() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_VALUE_TYPE, jsonSafeFailure.getValueType());
+        }
+        if (jsonSafeFailure.getDetailReason() != null) {
+            metadata.put(ResultMetadataKeys.ERROR_DETAIL_REASON, jsonSafeFailure.getDetailReason());
+        }
+    }
+
+    private static Map<String, Object> buildGenericFailureMetadata(Exception e, String stage,
+                                                                   String component, String reason) {
+        Map<String, Object> metadata = new HashMap<String, Object>();
+        metadata.put(ResultMetadataKeys.ERROR_TYPE, e != null ? e.getClass().getSimpleName() : "Exception");
+        metadata.put(ResultMetadataKeys.ERROR_MESSAGE, e != null ? e.getMessage() : null);
+        metadata.put(ResultMetadataKeys.ERROR_STAGE, stage);
+        metadata.put(ResultMetadataKeys.ERROR_COMPONENT, component);
+        metadata.put(ResultMetadataKeys.ERROR_REASON, reason);
+        return metadata;
     }
 
 }

@@ -91,8 +91,8 @@ public final class ExternalProcessProtocolCodec {
         payload.put("resultMetadataCategories", request.getResultMetadataCategories() != null ? enumSetToNames(request.getResultMetadataCategories()) : Collections.emptyList());
         payload.put("customSecurityPolicies", normalizeDescriptors(request.getCustomSecurityPolicies()));
         payload.put("dynamicModules", normalizeDescriptors(request.getDynamicModules()));
-        payload.put("variables", request.getVariables() != null ? JsonSafeValueNormalizer.normalizeMap(request.getVariables()) : Collections.emptyMap());
-        payload.put("metadata", request.getMetadata() != null ? JsonSafeValueNormalizer.normalizeMap(request.getMetadata()) : Collections.emptyMap());
+        payload.put("variables", normalizeRequestPayload(request.getVariables()));
+        payload.put("metadata", normalizeRequestPayload(request.getMetadata()));
         writeFrame(outputStream, payload);
     }
 
@@ -148,7 +148,7 @@ public final class ExternalProcessProtocolCodec {
         payload.put("status", response.getStatus());
         payload.put("value", JsonSafeValueNormalizer.normalizeForResponse(response.getValue()));
         payload.put("errorMessage", response.getErrorMessage());
-        payload.put("metadata", response.getMetadata() != null ? JsonSafeValueNormalizer.normalizeMap(response.getMetadata(), "$.metadata", true) : Collections.emptyMap());
+        payload.put("metadata", normalizeResponseMetadata(response.getMetadata()));
         payload.put("executionTime", response.getExecutionTime());
         payload.put("executorCacheStatistics", response.getExecutorCacheStatistics() != null ? response.getExecutorCacheStatistics() : Collections.emptyMap());
         payload.put("supportedTransportProtocolCapabilities", response.getSupportedTransportProtocolCapabilities() != null ? response.getSupportedTransportProtocolCapabilities() : Collections.emptyList());
@@ -197,6 +197,26 @@ public final class ExternalProcessProtocolCodec {
         if (!PROTOCOL_VERSION.equals(version)) {
             throw new IOException("Unsupported external-process protocol version: " + version);
         }
+    }
+
+    private static Map<String, Object> normalizeRequestPayload(Map<String, Object> payload) {
+        if (payload == null) {
+            return Collections.emptyMap();
+        }
+        if (JsonSafeValueNormalizer.isNormalizedMap(payload)) {
+            return payload;
+        }
+        return JsonSafeValueNormalizer.normalizeMap(payload);
+    }
+
+    private static Map<String, Object> normalizeResponseMetadata(Map<String, Object> payload) {
+        if (payload == null) {
+            return Collections.emptyMap();
+        }
+        if (JsonSafeValueNormalizer.isNormalizedMap(payload)) {
+            return payload;
+        }
+        return JsonSafeValueNormalizer.normalizeMap(payload, "$.metadata", true);
     }
 
 
@@ -410,10 +430,20 @@ public final class ExternalProcessProtocolCodec {
         for (ExternalProcessExtensionDescriptor descriptor : descriptors) {
             Map<String, Object> payload = new HashMap<String, Object>(DESCRIPTOR_PAYLOAD_CAPACITY);
             payload.put("className", descriptor.getClassName());
-            payload.put("descriptor", descriptor.getDescriptor() != null ? JsonSafeValueNormalizer.normalizeMap(descriptor.getDescriptor()) : Collections.emptyMap());
+            payload.put("descriptor", normalizeDescriptorPayload(descriptor.getDescriptor()));
             result.add(payload);
         }
         return result;
+    }
+
+    private static Map<String, Object> normalizeDescriptorPayload(Map<String, Object> payload) {
+        if (payload == null) {
+            return Collections.emptyMap();
+        }
+        if (JsonSafeValueNormalizer.isNormalizedMap(payload)) {
+            return payload;
+        }
+        return JsonSafeValueNormalizer.normalizeMap(payload);
     }
 
     @SuppressWarnings("unchecked")

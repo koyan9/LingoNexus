@@ -55,6 +55,7 @@ import io.github.koyan9.lingonexus.core.process.ExternalProcessExecutionRequestF
 import io.github.koyan9.lingonexus.core.process.ExternalProcessScriptExecutor;
 import io.github.koyan9.lingonexus.core.process.ExternalProcessWorkerPool;
 import io.github.koyan9.lingonexus.core.process.ExternalProcessWorkerPoolStatistics;
+import io.github.koyan9.lingonexus.core.process.JsonSafeValueException;
 import io.github.koyan9.lingonexus.core.util.LingoNexusUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,11 +139,6 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             }
 
             resultMetadataCategories = resolveResultMetadataCategories(context);
-            resultMetadata = createInitialResultMetadata(
-                    language,
-                    config.getSandboxConfig().getIsolationMode().name(),
-                    resultMetadataCategories
-            );
 
             if (config.getSandboxConfig().getIsolationMode() == ExecutionIsolationMode.EXTERNAL_PROCESS) {
                 PreparedExecution preparedExecution = executionPreparationService.prepareForExternalProcess(context);
@@ -203,7 +199,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 );
                 requiresMetadataFiltering = e instanceof ExternalProcessCompatibilityException;
             } else {
-                requiresMetadataFiltering = populateErrorResultMetadata(resultMetadata, e, false);
+                requiresMetadataFiltering = populateErrorResultMetadata(resultMetadata, e, false, resultMetadataCategories);
             }
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.EXECUTION_TIME, elapsedTime);
             putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, elapsedTime);
@@ -648,7 +644,8 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                         config.getSandboxConfig().getExternalProcessPoolSize(),
                         config.getSandboxConfig().getExternalProcessStartupRetries(),
                         config.getSandboxConfig().getExternalProcessPrewarmCount(),
-                        config.getSandboxConfig().getExternalProcessIdleTtlMs()
+                        config.getSandboxConfig().getExternalProcessIdleTtlMs(),
+                        config.getSandboxConfig().getExternalProcessBorrowTimeoutMs()
                 ),
                 new ExternalProcessExecutionRequestFactory(config, moduleRegistry, securityPolicies)
         );
@@ -768,31 +765,35 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private Map<String, Object> createErrorResultMetadata(String language,
-                                                        java.util.Set<ResultMetadataCategory> resultMetadataCategories,
-                                                        Exception exception,
-                                                        boolean async) {
+                                                          java.util.Set<ResultMetadataCategory> resultMetadataCategories,
+                                                          Exception exception,
+                                                          boolean async) {
         Map<String, Object> errorMetadata = createInitialResultMetadata(
                 language,
                 config.getSandboxConfig().getIsolationMode().name(),
                 resultMetadataCategories
         );
-        populateErrorResultMetadata(errorMetadata, exception, async);
+        populateErrorResultMetadata(errorMetadata, exception, async, resultMetadataCategories);
         return errorMetadata;
     }
 
     private boolean populateErrorResultMetadata(Map<String, Object> resultMetadata,
                                                 Exception exception,
-                                                boolean async) {
+                                                boolean async,
+                                                java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
         resultMetadata.put(ResultMetadataKeys.ERROR_TYPE, exception.getClass().getSimpleName());
         resultMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, exception.getMessage());
         if (async) {
             resultMetadata.put("async", true);
         }
         if (exception instanceof ExternalProcessCompatibilityException) {
-            populateExternalProcessCompatibilityMetadata(
-                    resultMetadata,
-                    (ExternalProcessCompatibilityException) exception
-            );
+            if (resultMetadataCategories != null
+                    && resultMetadataCategories.contains(ResultMetadataCategory.ERROR_DIAGNOSTICS)) {
+                populateExternalProcessCompatibilityMetadata(
+                        resultMetadata,
+                        (ExternalProcessCompatibilityException) exception
+                );
+            }
             return true;
         }
         return false;
@@ -918,13 +919,23 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private int resolveInitialResultMetadataCapacity(java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        if (resultMetadataCategories == null || resultMetadataCategories.isEmpty()) {
-            return 4;
+        int expectedEntries = 3; // scriptEngine, isolationMode, cacheHit
+        if (resultMetadataCategories != null) {
+            if (resultMetadataCategories.contains(ResultMetadataCategory.TIMING)) {
+                expectedEntries += 7; // compile, cacheWait, securityValidation, execution, queueWait, wall, total
+            }
+            if (resultMetadataCategories.contains(ResultMetadataCategory.THREAD)) {
+                expectedEntries += 2;
+            }
+            if (resultMetadataCategories.contains(ResultMetadataCategory.MODULE)) {
+                expectedEntries += 1;
+            }
+            if (resultMetadataCategories.contains(ResultMetadataCategory.SECURITY)) {
+                expectedEntries += 1;
+            }
         }
-        if (resultMetadataCategories.size() >= 3) {
-            return 16;
-        }
-        return 8;
+        int capacity = (int) ((expectedEntries / 0.75f) + 1.0f);
+        return Math.max(4, capacity);
     }
 
     private int resolveMergedResultMetadataCapacity(Map<String, Object> baseMetadata,
@@ -962,6 +973,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             metadata.remove(ResultMetadataKeys.ERROR_STAGE);
             metadata.remove(ResultMetadataKeys.ERROR_COMPONENT);
             metadata.remove(ResultMetadataKeys.ERROR_REASON);
+            metadata.remove(ResultMetadataKeys.ERROR_PATH);
+            metadata.remove(ResultMetadataKeys.ERROR_VALUE_TYPE);
+            metadata.remove(ResultMetadataKeys.ERROR_DETAIL_REASON);
         }
     }
 
@@ -983,6 +997,18 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         }
         if (exception.getReason() != null) {
             resultMetadata.put(ResultMetadataKeys.ERROR_REASON, exception.getReason());
+        }
+        JsonSafeValueException jsonSafeFailure = JsonSafeValueException.find(exception);
+        if (jsonSafeFailure != null) {
+            if (jsonSafeFailure.getPath() != null) {
+                resultMetadata.put(ResultMetadataKeys.ERROR_PATH, jsonSafeFailure.getPath());
+            }
+            if (jsonSafeFailure.getValueType() != null) {
+                resultMetadata.put(ResultMetadataKeys.ERROR_VALUE_TYPE, jsonSafeFailure.getValueType());
+            }
+            if (jsonSafeFailure.getDetailReason() != null) {
+                resultMetadata.put(ResultMetadataKeys.ERROR_DETAIL_REASON, jsonSafeFailure.getDetailReason());
+            }
         }
     }
 

@@ -152,5 +152,8 @@ public final class LingoNexusConstants {
         public static final String ERROR_STAGE = "errorStage";
         public static final String ERROR_COMPONENT = "errorComponent";
         public static final String ERROR_REASON = "errorReason";
+        public static final String ERROR_PATH = "errorPath";
+        public static final String ERROR_VALUE_TYPE = "errorValueType";
+        public static final String ERROR_DETAIL_REASON = "errorDetailReason";
     }
 }

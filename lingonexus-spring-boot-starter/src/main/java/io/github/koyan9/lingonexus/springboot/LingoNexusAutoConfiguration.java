@@ -97,6 +97,7 @@ public class LingoNexusAutoConfiguration {
                         .externalProcessStartupRetries(properties.getSandbox().getExternalProcessStartupRetries())
                         .externalProcessPrewarmCount(properties.getSandbox().getExternalProcessPrewarmCount())
                         .externalProcessIdleTtlMs(properties.getSandbox().getExternalProcessIdleTtlMs())
+                        .externalProcessBorrowTimeoutMs(properties.getSandbox().getExternalProcessBorrowTimeoutMs())
                         .externalProcessExecutorCacheMaxSize(properties.getSandbox().getExternalProcessExecutorCacheMaxSize())
                         .externalProcessExecutorCacheIdleTtlMs(properties.getSandbox().getExternalProcessExecutorCacheIdleTtlMs())
                         .classWhitelist(properties.getSandbox().getClassWhitelist())

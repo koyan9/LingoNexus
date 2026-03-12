@@ -109,7 +109,7 @@ public class ExternalProcessExecutionRequestFactory {
                 config.getRequiredSandboxTransportSerializerContractIds() != null ? config.getRequiredSandboxTransportSerializerContractIds() : Collections.<String>emptySet(),
                 config.isRequireEngineCacheCapableSandbox(),
                 true,
-                true,
+                config.isRequireJsonSafeExternalResult(),
                 config.isRequireJsonSafeExternalMetadata(),
                 config.getResultMetadataProfile(),
                 config.getResultMetadataCategories() != null ? config.getResultMetadataCategories() : Collections.<ResultMetadataCategory>emptySet(),
@@ -157,7 +157,7 @@ public class ExternalProcessExecutionRequestFactory {
             return JsonSafeValueNormalizer.normalizeMap(payload, path, false);
         } catch (IllegalArgumentException e) {
             throw compatibilityFailure(
-                    "External process mode requires JSON-safe request payload: " + e.getMessage(),
+                    "EXTERNAL_PROCESS requires JSON-safe request payload: " + e.getMessage(),
                     e,
                     REASON_REQUEST_PAYLOAD_NOT_JSON_SAFE
             );
@@ -255,7 +255,10 @@ public class ExternalProcessExecutionRequestFactory {
 
     private ExternalProcessExtensionDescriptor createSecurityPolicyDescriptor(SecurityPolicy securityPolicy) {
         try {
-            ExternalProcessExtensionDescriptor descriptor = ExternalProcessExtensionSupport.createDescriptor(securityPolicy);
+            ExternalProcessExtensionDescriptor descriptor = ExternalProcessExtensionSupport.createDescriptor(
+                    securityPolicy,
+                    "$.securityPolicies"
+            );
             ExternalProcessExtensionSupport.validateCompatibility(
                     securityPolicy.getClass(),
                     SecurityPolicy.class,
@@ -282,7 +285,10 @@ public class ExternalProcessExecutionRequestFactory {
 
     private ExternalProcessExtensionDescriptor createDynamicModuleDescriptor(ScriptModule module) {
         try {
-            ExternalProcessExtensionDescriptor descriptor = ExternalProcessExtensionSupport.createDescriptor(module);
+            ExternalProcessExtensionDescriptor descriptor = ExternalProcessExtensionSupport.createDescriptor(
+                    module,
+                    "$.scriptModules"
+            );
             ExternalProcessExtensionSupport.validateCompatibility(
                     module.getClass(),
                     ScriptModule.class,

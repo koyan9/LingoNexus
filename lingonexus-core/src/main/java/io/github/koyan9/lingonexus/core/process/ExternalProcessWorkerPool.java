@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -33,6 +34,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * Simple persistent worker pool for external process isolation.
  */
 public class ExternalProcessWorkerPool implements LifecycleAware {
+
+    private static final long BORROW_WAIT_TIMEOUT_MS = 200L;
 
     interface WorkerClientFactory {
         ExternalProcessWorkerClient create(String javaCommand, String classpath) throws IOException;
@@ -43,6 +46,7 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
     private final int maxSize;
     private final int startupRetries;
     private final long idleTtlMs;
+    private final long borrowTimeoutMs;
     private final WorkerClientFactory workerClientFactory;
     private final BlockingQueue<ExternalProcessWorkerClient> idleWorkers = new LinkedBlockingQueue<ExternalProcessWorkerClient>();
     private final Set<ExternalProcessWorkerClient> allWorkers = ConcurrentHashMap.newKeySet();
@@ -57,80 +61,36 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
 
     public ExternalProcessWorkerPool(String javaCommand, String classpath, int maxSize,
                                      int startupRetries, int prewarmCount, long idleTtlMs) {
-        this(javaCommand, classpath, maxSize, startupRetries, prewarmCount, idleTtlMs, ExternalProcessWorkerClient::new);
+        this(javaCommand, classpath, maxSize, startupRetries, prewarmCount, idleTtlMs, 0L, ExternalProcessWorkerClient::new);
     }
 
     ExternalProcessWorkerPool(String javaCommand, String classpath, int maxSize,
                               int startupRetries, int prewarmCount, long idleTtlMs,
                               WorkerClientFactory workerClientFactory) {
+        this(javaCommand, classpath, maxSize, startupRetries, prewarmCount, idleTtlMs, 0L, workerClientFactory);
+    }
+
+    public ExternalProcessWorkerPool(String javaCommand, String classpath, int maxSize,
+                                     int startupRetries, int prewarmCount, long idleTtlMs,
+                                     long borrowTimeoutMs) {
+        this(javaCommand, classpath, maxSize, startupRetries, prewarmCount, idleTtlMs, borrowTimeoutMs, ExternalProcessWorkerClient::new);
+    }
+
+    ExternalProcessWorkerPool(String javaCommand, String classpath, int maxSize,
+                              int startupRetries, int prewarmCount, long idleTtlMs,
+                              long borrowTimeoutMs, WorkerClientFactory workerClientFactory) {
         this.javaCommand = javaCommand;
         this.classpath = classpath;
         this.maxSize = Math.max(1, maxSize);
         this.startupRetries = Math.max(0, startupRetries);
         this.idleTtlMs = Math.max(0L, idleTtlMs);
+        this.borrowTimeoutMs = Math.max(0L, borrowTimeoutMs);
         this.workerClientFactory = workerClientFactory;
         prewarm(prewarmCount);
     }
 
     public ExternalProcessWorkerClient borrowWorker() throws IOException, InterruptedException {
-        ensureActive();
-
-        while (true) {
-            ExternalProcessWorkerClient worker = idleWorkers.poll();
-            if (worker != null) {
-                if (worker.isIdleExpired(idleTtlMs)) {
-                    evictionCount.incrementAndGet();
-                    discardWorker(worker);
-                    continue;
-                }
-                if (worker.isAlive() && worker.ping()) {
-                    worker.markBorrowed();
-                    borrowCount.incrementAndGet();
-                    return worker;
-                }
-                healthCheckFailureCount.incrementAndGet();
-                discardWorker(worker);
-                continue;
-            }
-
-            if (createdWorkers.get() < maxSize) {
-                synchronized (this) {
-                    if (createdWorkers.get() < maxSize) {
-                        createdWorkers.incrementAndGet();
-                        try {
-                            ExternalProcessWorkerClient newWorker = createWorkerWithRetry();
-                            if (newWorker.isAlive() && newWorker.ping()) {
-                                allWorkers.add(newWorker);
-                                newWorker.markBorrowed();
-                                borrowCount.incrementAndGet();
-                                return newWorker;
-                            }
-                            healthCheckFailureCount.incrementAndGet();
-                            newWorker.shutdown();
-                            createdWorkers.decrementAndGet();
-                            continue;
-                        } catch (IOException e) {
-                            createdWorkers.decrementAndGet();
-                            throw e;
-                        }
-                    }
-                }
-            }
-
-            worker = idleWorkers.take();
-            if (worker.isIdleExpired(idleTtlMs)) {
-                evictionCount.incrementAndGet();
-                discardWorker(worker);
-                continue;
-            }
-            if (worker.isAlive() && worker.ping()) {
-                worker.markBorrowed();
-                borrowCount.incrementAndGet();
-                return worker;
-            }
-            healthCheckFailureCount.incrementAndGet();
-            discardWorker(worker);
-        }
+        return borrowWorkerWithTimeout(borrowTimeoutMs);
     }
 
     public void returnWorker(ExternalProcessWorkerClient worker) {
@@ -224,6 +184,100 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
         if (isShutdown()) {
             throw new IllegalStateException("External process worker pool has been shut down");
         }
+    }
+
+    private ExternalProcessWorkerClient borrowWorkerWithTimeout(long timeoutMs) throws IOException, InterruptedException {
+        ensureActive();
+        long deadlineNanos = timeoutMs > 0 ? System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs) : Long.MAX_VALUE;
+
+        while (true) {
+            if (isShutdown()) {
+                throw new IllegalStateException("External process worker pool has been shut down");
+            }
+            if (timeoutMs > 0 && System.nanoTime() > deadlineNanos) {
+                throw new ExternalProcessWorkerBorrowTimeoutException(
+                        "External process worker borrow timed out after " + timeoutMs + "ms"
+                );
+            }
+            ExternalProcessWorkerClient worker = idleWorkers.poll();
+            if (worker != null) {
+                if (worker.isIdleExpired(idleTtlMs)) {
+                    evictionCount.incrementAndGet();
+                    discardWorker(worker);
+                    continue;
+                }
+                if (worker.isAlive() && worker.ping()) {
+                    worker.markBorrowed();
+                    borrowCount.incrementAndGet();
+                    return worker;
+                }
+                healthCheckFailureCount.incrementAndGet();
+                discardWorker(worker);
+                continue;
+            }
+
+            if (createdWorkers.get() < maxSize) {
+                synchronized (this) {
+                    if (createdWorkers.get() < maxSize) {
+                        createdWorkers.incrementAndGet();
+                        try {
+                            ExternalProcessWorkerClient newWorker = createWorkerWithRetry();
+                            if (newWorker.isAlive() && newWorker.ping()) {
+                                allWorkers.add(newWorker);
+                                newWorker.markBorrowed();
+                                borrowCount.incrementAndGet();
+                                return newWorker;
+                            }
+                            healthCheckFailureCount.incrementAndGet();
+                            newWorker.shutdown();
+                            createdWorkers.decrementAndGet();
+                            continue;
+                        } catch (IOException e) {
+                            createdWorkers.decrementAndGet();
+                            throw e;
+                        }
+                    }
+                }
+            }
+
+            long waitMs = resolveBorrowWaitMs(timeoutMs, deadlineNanos);
+            if (waitMs <= 0L) {
+                throw new ExternalProcessWorkerBorrowTimeoutException(
+                        "External process worker borrow timed out after " + timeoutMs + "ms"
+                );
+            }
+            worker = idleWorkers.poll(waitMs, TimeUnit.MILLISECONDS);
+            if (worker == null) {
+                continue;
+            }
+            if (worker.isIdleExpired(idleTtlMs)) {
+                evictionCount.incrementAndGet();
+                discardWorker(worker);
+                continue;
+            }
+            if (worker.isAlive() && worker.ping()) {
+                worker.markBorrowed();
+                borrowCount.incrementAndGet();
+                return worker;
+            }
+            healthCheckFailureCount.incrementAndGet();
+            discardWorker(worker);
+        }
+    }
+
+    private long resolveBorrowWaitMs(long timeoutMs, long deadlineNanos) {
+        if (timeoutMs <= 0L || deadlineNanos == Long.MAX_VALUE) {
+            return BORROW_WAIT_TIMEOUT_MS;
+        }
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        if (remainingNanos <= 0L) {
+            return 0L;
+        }
+        long remainingMs = TimeUnit.NANOSECONDS.toMillis(remainingNanos);
+        if (remainingMs <= 0L) {
+            return 0L;
+        }
+        return Math.min(BORROW_WAIT_TIMEOUT_MS, remainingMs);
     }
 
     public static final class ProtocolHandshakeSnapshot {

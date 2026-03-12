@@ -31,6 +31,13 @@ public final class JsonSafeValueNormalizer {
     private JsonSafeValueNormalizer() {
     }
 
+    interface JsonSafeNormalized {
+    }
+
+    static boolean isNormalizedMap(Map<?, ?> value) {
+        return value instanceof JsonSafeNormalized;
+    }
+
     public static Object normalize(Object value) {
         return normalize(value, "$", false);
     }
@@ -61,6 +68,10 @@ public final class JsonSafeValueNormalizer {
             return value;
         }
 
+        if (value instanceof JsonSafeNormalized) {
+            return value;
+        }
+
         if (value instanceof Enum<?>) {
             return ((Enum<?>) value).name();
         }
@@ -81,17 +92,25 @@ public final class JsonSafeValueNormalizer {
             return String.valueOf(value);
         }
 
-        throw new IllegalArgumentException(
-                "Unsupported value at " + path + ": " + value.getClass().getName()
+        throw new JsonSafeValueException(
+                "Unsupported value at " + path + ": " + value.getClass().getName(),
+                path,
+                value.getClass().getName(),
+                "value_type_not_json_safe"
         );
     }
 
     private static Map<String, Object> normalizeMapInternal(Map<?, ?> value, String path, boolean allowStringFallback) {
-        Map<String, Object> normalized = new LinkedHashMap<String, Object>();
+        Map<String, Object> normalized = new JsonSafeMap(value != null ? value.size() : 0);
         for (Map.Entry<?, ?> entry : value.entrySet()) {
             Object key = entry.getKey();
             if (!(key instanceof String)) {
-                throw new IllegalArgumentException("Unsupported map key at " + path + ": " + key);
+                throw new JsonSafeValueException(
+                        "Unsupported map key at " + path + ": " + key,
+                        path,
+                        key != null ? key.getClass().getName() : "null",
+                        "map_key_not_string"
+                );
             }
             String childPath = path + "." + key;
             normalized.put((String) key, normalize(entry.getValue(), childPath, allowStringFallback));
@@ -100,7 +119,7 @@ public final class JsonSafeValueNormalizer {
     }
 
     private static List<Object> normalizeCollection(Collection<?> value, String path, boolean allowStringFallback) {
-        List<Object> normalized = new ArrayList<Object>(value.size());
+        List<Object> normalized = new JsonSafeList(value.size());
         int index = 0;
         for (Object item : value) {
             normalized.add(normalize(item, path + "[" + index + "]", allowStringFallback));
@@ -111,10 +130,24 @@ public final class JsonSafeValueNormalizer {
 
     private static List<Object> normalizeArray(Object array, String path, boolean allowStringFallback) {
         int length = Array.getLength(array);
-        List<Object> normalized = new ArrayList<Object>(length);
+        List<Object> normalized = new JsonSafeList(length);
         for (int index = 0; index < length; index++) {
             normalized.add(normalize(Array.get(array, index), path + "[" + index + "]", allowStringFallback));
         }
         return normalized;
+    }
+
+    private static final class JsonSafeMap extends LinkedHashMap<String, Object> implements JsonSafeNormalized {
+
+        private JsonSafeMap(int size) {
+            super(Math.max(4, (int) (size / 0.75f) + 1));
+        }
+    }
+
+    private static final class JsonSafeList extends ArrayList<Object> implements JsonSafeNormalized {
+
+        private JsonSafeList(int size) {
+            super(size);
+        }
     }
 }

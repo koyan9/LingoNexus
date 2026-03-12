@@ -222,6 +222,7 @@ public class LingoNexusProperties {
         private int externalProcessStartupRetries = 2;
         private int externalProcessPrewarmCount = 1;
         private long externalProcessIdleTtlMs = 300000L;
+        private long externalProcessBorrowTimeoutMs = -1L;
         private int externalProcessExecutorCacheMaxSize = 8;
         private long externalProcessExecutorCacheIdleTtlMs = 300000L;
         private Set<String> classWhitelist = new HashSet<>();
@@ -297,6 +298,14 @@ public class LingoNexusProperties {
 
         public void setExternalProcessIdleTtlMs(long externalProcessIdleTtlMs) {
             this.externalProcessIdleTtlMs = externalProcessIdleTtlMs;
+        }
+
+        public long getExternalProcessBorrowTimeoutMs() {
+            return externalProcessBorrowTimeoutMs;
+        }
+
+        public void setExternalProcessBorrowTimeoutMs(long externalProcessBorrowTimeoutMs) {
+            this.externalProcessBorrowTimeoutMs = externalProcessBorrowTimeoutMs;
         }
 
         public int getExternalProcessExecutorCacheMaxSize() {

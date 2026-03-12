@@ -85,6 +85,7 @@ public class SandboxConfig {
     private final int externalProcessStartupRetries;
     private final int externalProcessPrewarmCount;
     private final long externalProcessIdleTtlMs;
+    private final long externalProcessBorrowTimeoutMs;
     private final int externalProcessExecutorCacheMaxSize;
     private final long externalProcessExecutorCacheIdleTtlMs;
     private final Set<String> classWhitelist;
@@ -100,6 +101,9 @@ public class SandboxConfig {
         this.externalProcessStartupRetries = builder.externalProcessStartupRetries;
         this.externalProcessPrewarmCount = builder.externalProcessPrewarmCount;
         this.externalProcessIdleTtlMs = builder.externalProcessIdleTtlMs;
+        this.externalProcessBorrowTimeoutMs = builder.externalProcessBorrowTimeoutMs < 0L
+                ? builder.timeoutMs
+                : builder.externalProcessBorrowTimeoutMs;
         this.externalProcessExecutorCacheMaxSize = builder.externalProcessExecutorCacheMaxSize;
         this.externalProcessExecutorCacheIdleTtlMs = builder.externalProcessExecutorCacheIdleTtlMs;
         this.classWhitelist = Collections.unmodifiableSet(new HashSet<>(builder.classWhitelist));
@@ -142,6 +146,10 @@ public class SandboxConfig {
         return externalProcessIdleTtlMs;
     }
 
+    public long getExternalProcessBorrowTimeoutMs() {
+        return externalProcessBorrowTimeoutMs;
+    }
+
     public int getExternalProcessExecutorCacheMaxSize() {
         return externalProcessExecutorCacheMaxSize;
     }
@@ -182,6 +190,7 @@ public class SandboxConfig {
         private int externalProcessStartupRetries = 2;
         private int externalProcessPrewarmCount = 1;
         private long externalProcessIdleTtlMs = 300000L;
+        private long externalProcessBorrowTimeoutMs = -1L;
         private int externalProcessExecutorCacheMaxSize = 8;
         private long externalProcessExecutorCacheIdleTtlMs = 300000L;
         private Set<String> classWhitelist = createDefaultWhitelist();
@@ -259,6 +268,14 @@ public class SandboxConfig {
                 throw new IllegalArgumentException("externalProcessIdleTtlMs must be non-negative");
             }
             this.externalProcessIdleTtlMs = externalProcessIdleTtlMs;
+            return this;
+        }
+
+        public Builder externalProcessBorrowTimeoutMs(long externalProcessBorrowTimeoutMs) {
+            if (externalProcessBorrowTimeoutMs < 0 && externalProcessBorrowTimeoutMs != -1L) {
+                throw new IllegalArgumentException("externalProcessBorrowTimeoutMs must be non-negative or -1");
+            }
+            this.externalProcessBorrowTimeoutMs = externalProcessBorrowTimeoutMs;
             return this;
         }
 
