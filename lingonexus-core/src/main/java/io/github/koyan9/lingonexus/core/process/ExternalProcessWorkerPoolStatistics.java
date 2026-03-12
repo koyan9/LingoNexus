@@ -27,12 +27,14 @@ public class ExternalProcessWorkerPoolStatistics {
     private final long borrowCount;
     private final long returnCount;
     private final long discardCount;
+    private final long borrowTimeoutCount;
     private final long evictionCount;
     private final long startupFailureCount;
     private final long healthCheckFailureCount;
 
     public ExternalProcessWorkerPoolStatistics(int maxSize, int createdWorkers, int idleWorkers,
                                                long borrowCount, long returnCount, long discardCount,
+                                               long borrowTimeoutCount,
                                                long evictionCount,
                                                long startupFailureCount, long healthCheckFailureCount) {
         this.maxSize = maxSize;
@@ -41,6 +43,7 @@ public class ExternalProcessWorkerPoolStatistics {
         this.borrowCount = borrowCount;
         this.returnCount = returnCount;
         this.discardCount = discardCount;
+        this.borrowTimeoutCount = borrowTimeoutCount;
         this.evictionCount = evictionCount;
         this.startupFailureCount = startupFailureCount;
         this.healthCheckFailureCount = healthCheckFailureCount;
@@ -70,6 +73,10 @@ public class ExternalProcessWorkerPoolStatistics {
         return discardCount;
     }
 
+    public long getBorrowTimeoutCount() {
+        return borrowTimeoutCount;
+    }
+
     public long getEvictionCount() {
         return evictionCount;
     }
@@ -91,6 +98,7 @@ public class ExternalProcessWorkerPoolStatistics {
                 ", borrowCount=" + borrowCount +
                 ", returnCount=" + returnCount +
                 ", discardCount=" + discardCount +
+                ", borrowTimeoutCount=" + borrowTimeoutCount +
                 ", evictionCount=" + evictionCount +
                 ", startupFailureCount=" + startupFailureCount +
                 ", healthCheckFailureCount=" + healthCheckFailureCount +

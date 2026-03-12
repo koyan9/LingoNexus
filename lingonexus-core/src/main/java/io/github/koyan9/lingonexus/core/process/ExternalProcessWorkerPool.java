@@ -55,6 +55,7 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
     private final AtomicLong borrowCount = new AtomicLong(0);
     private final AtomicLong returnCount = new AtomicLong(0);
     private final AtomicLong discardCount = new AtomicLong(0);
+    private final AtomicLong borrowTimeoutCount = new AtomicLong(0);
     private final AtomicLong evictionCount = new AtomicLong(0);
     private final AtomicLong startupFailureCount = new AtomicLong(0);
     private final AtomicLong healthCheckFailureCount = new AtomicLong(0);
@@ -141,6 +142,7 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
                 borrowCount.get(),
                 returnCount.get(),
                 discardCount.get(),
+                borrowTimeoutCount.get(),
                 evictionCount.get(),
                 startupFailureCount.get(),
                 healthCheckFailureCount.get()
@@ -195,6 +197,7 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
                 throw new IllegalStateException("External process worker pool has been shut down");
             }
             if (timeoutMs > 0 && System.nanoTime() > deadlineNanos) {
+                borrowTimeoutCount.incrementAndGet();
                 throw new ExternalProcessWorkerBorrowTimeoutException(
                         "External process worker borrow timed out after " + timeoutMs + "ms"
                 );
@@ -242,6 +245,7 @@ public class ExternalProcessWorkerPool implements LifecycleAware {
 
             long waitMs = resolveBorrowWaitMs(timeoutMs, deadlineNanos);
             if (waitMs <= 0L) {
+                borrowTimeoutCount.incrementAndGet();
                 throw new ExternalProcessWorkerBorrowTimeoutException(
                         "External process worker borrow timed out after " + timeoutMs + "ms"
                 );

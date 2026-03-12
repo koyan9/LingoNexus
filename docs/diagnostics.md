@@ -43,6 +43,7 @@ if (diagnostics.getExternalProcessStatistics() != null) {
     System.out.println("External created workers: " + diagnostics.getExternalProcessStatistics().getCreatedWorkers());
     System.out.println("External idle workers: " + diagnostics.getExternalProcessStatistics().getIdleWorkers());
     System.out.println("External borrow count: " + diagnostics.getExternalProcessStatistics().getBorrowCount());
+    System.out.println("External borrow timeouts: " + diagnostics.getExternalProcessStatistics().getBorrowTimeoutCount());
     System.out.println("External discard count: " + diagnostics.getExternalProcessStatistics().getDiscardCount());
     System.out.println("External eviction count: " + diagnostics.getExternalProcessStatistics().getEvictionCount());
     System.out.println("Worker protocol version: " + diagnostics.getExternalProcessStatistics().getWorkerProtocolVersion());
