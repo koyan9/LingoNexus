@@ -389,7 +389,7 @@ sequenceDiagram
 | `ExternalProcessWorkerPool` | 负责 worker 创建、预热、借还、闲置淘汰、健康检查 |
 | `ExternalProcessWorkerClient` | 与单个 worker 进程通信 |
 | `ExternalProcessWorkerMain` | 外部 worker 入口 |
-| `ExternalProcessProtocolCodec` | JSON 长度前缀协议编解码 |
+| `ExternalProcessProtocolCodec` | JSON 长度前缀协议编解码（默认 64 MB 帧上限） |
 
 ### 7.3 当前工作方式
 

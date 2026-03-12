@@ -206,6 +206,8 @@ ScriptResult result = engine.execute(
 外部进程失败会产生稳定的 `errorReason` 码，例如
 `worker_borrow_timeout`、`worker_startup_failed`、`worker_borrow_interrupted`、`worker_execution_timeout`。
 
+`engine.getDiagnostics().getExternalProcessStatistics()` 还提供 `borrowTimeoutCount` 用于观察 worker 借用超时情况。
+
 ## 性能快照（2026-03-10）
 
 - 外部进程复用：冷启动 808 ms，重复均值 2.00 ms（executor cache hits 20，misses 1）

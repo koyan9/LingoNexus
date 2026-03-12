@@ -206,6 +206,8 @@ When external-process payload compatibility fails, `ScriptResult.metadata` may i
 External-process failures are classified using stable `errorReason` codes such as
 `worker_borrow_timeout`, `worker_startup_failed`, `worker_borrow_interrupted`, and `worker_execution_timeout`.
 
+`engine.getDiagnostics().getExternalProcessStatistics()` also includes `borrowTimeoutCount` to track pool saturation.
+
 ## Performance Snapshot (2026-03-10)
 
 - External-process reuse: cold 808 ms, repeated avg 2.00 ms (executor cache hits 20, misses 1)
