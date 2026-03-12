@@ -40,6 +40,7 @@ public final class ExternalProcessProtocolCodec {
     private static final int REQUEST_PAYLOAD_CAPACITY = 48;
     private static final int RESPONSE_PAYLOAD_CAPACITY = 16;
     private static final int DESCRIPTOR_PAYLOAD_CAPACITY = 4;
+    private static final int MAX_FRAME_BYTES = 64 * 1024 * 1024;
     private static final java.util.List<String> SUPPORTED_TRANSPORT_PROTOCOL_CAPABILITIES = java.util.Collections.unmodifiableList(
             java.util.Arrays.asList(
                     io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.JSON_FRAMED.name(),
@@ -186,6 +187,9 @@ public final class ExternalProcessProtocolCodec {
         int length = dataInputStream.readInt();
         if (length < 0) {
             throw new IOException("Negative frame length received from external worker");
+        }
+        if (length > MAX_FRAME_BYTES) {
+            throw new IOException("External-process frame length exceeds limit: " + length);
         }
         byte[] bytes = new byte[length];
         dataInputStream.readFully(bytes);
