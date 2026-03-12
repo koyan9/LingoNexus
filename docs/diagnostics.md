@@ -245,6 +245,7 @@ Spring Boot starter binding now also supports YAML-style configuration such as:
 - Worker-side failures returned in responses also contribute to `failureReasonCounts` and latest failure reason tracking.
 - Worker handshake data is now available from the first successful worker borrow because new workers perform an eager health-check before entering the reusable pool.
 - JSON-safe compatibility failures may include `errorPath`, `errorValueType`, and `errorDetailReason` for structured payload diagnostics.
+- External-process protocol frames are capped at 64 MB; oversized frames are rejected.
 - For `DIRECT` and `ISOLATED_THREAD` executors that never touch external isolation, external statistics remain a zero-state snapshot until the external runtime is actually initialized.
 - `basic` keeps core result metadata such as script engine, isolation mode, cache-hit, and error basics.
 - `timing` adds compile/execution/queue/wall/total timing fields but still suppresses thread/module/diagnostic-detail fields.
