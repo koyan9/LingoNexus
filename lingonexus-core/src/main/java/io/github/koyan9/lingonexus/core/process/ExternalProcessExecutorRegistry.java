@@ -30,12 +30,12 @@ import io.github.koyan9.lingonexus.core.LingoNexusBuilder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Reuses worker-local executors keyed by configuration signature.
@@ -47,7 +47,8 @@ public final class ExternalProcessExecutorRegistry {
     private static final String COMPONENT_EXTERNAL_WORKER = "external-worker";
     private static final String REASON_SECURITY_POLICY_DESCRIPTOR_LOAD_FAILED = "security_policy_descriptor_load_failed";
     private static final String REASON_SCRIPT_MODULE_DESCRIPTOR_LOAD_FAILED = "script_module_descriptor_load_failed";
-    private static final LinkedHashMap<String, CachedExecutorEntry> EXECUTORS = new LinkedHashMap<String, CachedExecutorEntry>(16, 0.75f, true);
+    private static final ConcurrentHashMap<String, CachedExecutorEntry> EXECUTORS = new ConcurrentHashMap<String, CachedExecutorEntry>();
+    private static final ReentrantLock evictionLock = new ReentrantLock();
     private static final AtomicLong cacheHits = new AtomicLong(0);
     private static final AtomicLong cacheMisses = new AtomicLong(0);
     private static final AtomicLong cacheEvictions = new AtomicLong(0);
@@ -55,11 +56,9 @@ public final class ExternalProcessExecutorRegistry {
     private ExternalProcessExecutorRegistry() {
     }
 
-    public static synchronized LingoNexusExecutor getOrCreate(ExternalProcessExecutionRequest request) {
+    public static LingoNexusExecutor getOrCreate(ExternalProcessExecutionRequest request) {
         try {
             String signature = buildSignature(request);
-            evictExpired(request.getExternalProcessExecutorCacheIdleTtlMs());
-
             CachedExecutorEntry cached = EXECUTORS.get(signature);
             if (cached != null) {
                 cached.touch();
@@ -67,10 +66,19 @@ public final class ExternalProcessExecutorRegistry {
                 return cached.getExecutor();
             }
 
-            cacheMisses.incrementAndGet();
             LingoNexusExecutor executor = createExecutor(request);
+            CachedExecutorEntry created = new CachedExecutorEntry(executor);
+            CachedExecutorEntry existing = EXECUTORS.putIfAbsent(signature, created);
+            if (existing != null) {
+                closeQuietly(executor);
+                existing.touch();
+                cacheHits.incrementAndGet();
+                return existing.getExecutor();
+            }
+
+            cacheMisses.incrementAndGet();
+            evictExpired(request.getExternalProcessExecutorCacheIdleTtlMs());
             enforceCapacity(request.getExternalProcessExecutorCacheMaxSize());
-            EXECUTORS.put(signature, new CachedExecutorEntry(executor));
             return executor;
         } catch (RuntimeException e) {
             throw e;
@@ -79,7 +87,7 @@ public final class ExternalProcessExecutorRegistry {
         }
     }
 
-    public static synchronized void shutdownAll() {
+    public static void shutdownAll() {
         for (CachedExecutorEntry entry : EXECUTORS.values()) {
             try {
                 entry.getExecutor().close();
@@ -89,7 +97,7 @@ public final class ExternalProcessExecutorRegistry {
         EXECUTORS.clear();
     }
 
-    public static synchronized Map<String, Long> getStatistics() {
+    public static Map<String, Long> getStatistics() {
         Map<String, Long> statistics = new HashMap<String, Long>();
         statistics.put("executorCacheSize", (long) EXECUTORS.size());
         statistics.put("executorCacheHits", cacheHits.get());
@@ -99,16 +107,26 @@ public final class ExternalProcessExecutorRegistry {
     }
 
     private static void enforceCapacity(int maxSize) {
-        int limit = Math.max(1, maxSize);
-        while (EXECUTORS.size() >= limit) {
-            Iterator<Map.Entry<String, CachedExecutorEntry>> iterator = EXECUTORS.entrySet().iterator();
-            if (!iterator.hasNext()) {
-                return;
+        if (maxSize <= 0) {
+            return;
+        }
+        if (!evictionLock.tryLock()) {
+            return;
+        }
+        try {
+            int limit = Math.max(1, maxSize);
+            while (EXECUTORS.size() > limit) {
+                Map.Entry<String, CachedExecutorEntry> eldest = findOldestEntry();
+                if (eldest == null) {
+                    return;
+                }
+                if (EXECUTORS.remove(eldest.getKey(), eldest.getValue())) {
+                    closeQuietly(eldest.getValue().getExecutor());
+                    cacheEvictions.incrementAndGet();
+                }
             }
-            Map.Entry<String, CachedExecutorEntry> eldest = iterator.next();
-            iterator.remove();
-            closeQuietly(eldest.getValue().getExecutor());
-            cacheEvictions.incrementAndGet();
+        } finally {
+            evictionLock.unlock();
         }
     }
 
@@ -116,17 +134,33 @@ public final class ExternalProcessExecutorRegistry {
         if (idleTtlMs <= 0) {
             return;
         }
+        if (!evictionLock.tryLock()) {
+            return;
+        }
         long now = System.nanoTime();
         long ttlNanos = TimeUnit.MILLISECONDS.toNanos(idleTtlMs);
-        Iterator<Map.Entry<String, CachedExecutorEntry>> iterator = EXECUTORS.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, CachedExecutorEntry> entry = iterator.next();
-            if (now - entry.getValue().getLastAccessNanos() > ttlNanos) {
-                closeQuietly(entry.getValue().getExecutor());
-                iterator.remove();
-                cacheEvictions.incrementAndGet();
+        try {
+            for (Map.Entry<String, CachedExecutorEntry> entry : EXECUTORS.entrySet()) {
+                if (now - entry.getValue().getLastAccessNanos() > ttlNanos) {
+                    if (EXECUTORS.remove(entry.getKey(), entry.getValue())) {
+                        closeQuietly(entry.getValue().getExecutor());
+                        cacheEvictions.incrementAndGet();
+                    }
+                }
+            }
+        } finally {
+            evictionLock.unlock();
+        }
+    }
+
+    private static Map.Entry<String, CachedExecutorEntry> findOldestEntry() {
+        Map.Entry<String, CachedExecutorEntry> oldest = null;
+        for (Map.Entry<String, CachedExecutorEntry> entry : EXECUTORS.entrySet()) {
+            if (oldest == null || entry.getValue().getLastAccessNanos() < oldest.getValue().getLastAccessNanos()) {
+                oldest = entry;
             }
         }
+        return oldest;
     }
 
     private static String buildSignature(ExternalProcessExecutionRequest request) throws Exception {
