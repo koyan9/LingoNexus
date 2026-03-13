@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Prepares execution variables and runtime context for script execution.
@@ -41,8 +42,10 @@ public class ExecutionPreparationService {
     private final ModuleRegistry moduleRegistry;
     private volatile long cachedGlobalVariablesVersion = Long.MIN_VALUE;
     private volatile Map<String, Object> cachedGlobalVariables = Collections.emptyMap();
+    private final ReentrantLock globalVariablesLock = new ReentrantLock();
     private volatile long cachedModuleSnapshotVersion = Long.MIN_VALUE;
     private volatile ModuleSnapshot cachedModuleSnapshot = ModuleSnapshot.empty();
+    private final ReentrantLock moduleSnapshotLock = new ReentrantLock();
 
     public ExecutionPreparationService(VariableManager variableManager, ModuleRegistry moduleRegistry) {
         this.variableManager = variableManager;
@@ -144,7 +147,10 @@ public class ExecutionPreparationService {
             return snapshot;
         }
 
-        synchronized (this) {
+        if (!globalVariablesLock.tryLock()) {
+            return snapshot;
+        }
+        try {
             if (version != cachedGlobalVariablesVersion) {
                 Map<String, Object> variables = variableManager.getAllVariables();
                 if (variables == null || variables.isEmpty()) {
@@ -155,6 +161,8 @@ public class ExecutionPreparationService {
                 cachedGlobalVariablesVersion = version;
             }
             return cachedGlobalVariables;
+        } finally {
+            globalVariablesLock.unlock();
         }
     }
 
@@ -169,12 +177,17 @@ public class ExecutionPreparationService {
             return snapshot;
         }
 
-        synchronized (this) {
+        if (!moduleSnapshotLock.tryLock()) {
+            return snapshot;
+        }
+        try {
             if (version != cachedModuleSnapshotVersion) {
                 cachedModuleSnapshot = buildModuleSnapshot(moduleRegistry.getAllModules());
                 cachedModuleSnapshotVersion = version;
             }
             return cachedModuleSnapshot;
+        } finally {
+            moduleSnapshotLock.unlock();
         }
     }
 
