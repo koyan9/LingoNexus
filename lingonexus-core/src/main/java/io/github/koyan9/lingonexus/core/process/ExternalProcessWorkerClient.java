@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Persistent worker client backed by one external JVM process.
@@ -46,6 +47,7 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
     private final BufferedInputStream responseStream;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private final AtomicLong lastReturnedAtNanos = new AtomicLong(System.nanoTime());
+    private final ReentrantLock ioLock = new ReentrantLock();
     private volatile ExternalProcessWorkerPool.ProtocolHandshakeSnapshot protocolHandshakeSnapshot =
             ExternalProcessWorkerPool.ProtocolHandshakeSnapshot.empty();
     private volatile String protocolVersion;
@@ -88,8 +90,9 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
         }
     }
 
-    public synchronized ExternalProcessExecutionResponse execute(ExternalProcessExecutionRequest request, long timeoutMs) {
+    public ExternalProcessExecutionResponse execute(ExternalProcessExecutionRequest request, long timeoutMs) {
         ensureActive();
+        ioLock.lock();
         try {
             socket.setSoTimeout(timeoutMs > 0 ? safeSocketTimeout(timeoutMs) : 0);
             ExternalProcessProtocolCodec.writeRequest(requestStream, request);
@@ -103,6 +106,8 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
         } catch (Exception e) {
             shutdown();
             throw new ScriptRuntimeException("External worker execution failed", e);
+        } finally {
+            ioLock.unlock();
         }
     }
 
@@ -143,8 +148,11 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
         return protocolHandshakeSnapshot;
     }
 
-    public synchronized boolean ping() {
+    public boolean ping() {
         if (!isAlive()) {
+            return false;
+        }
+        if (!ioLock.tryLock()) {
             return false;
         }
         try {
@@ -163,6 +171,8 @@ public class ExternalProcessWorkerClient implements LifecycleAware {
             return false;
         } catch (Exception e) {
             return false;
+        } finally {
+            ioLock.unlock();
         }
     }
 
