@@ -40,7 +40,8 @@ public final class ExternalProcessProtocolCodec {
     private static final int REQUEST_PAYLOAD_CAPACITY = 48;
     private static final int RESPONSE_PAYLOAD_CAPACITY = 16;
     private static final int DESCRIPTOR_PAYLOAD_CAPACITY = 4;
-    private static final int MAX_FRAME_BYTES = 64 * 1024 * 1024;
+    private static final int DEFAULT_MAX_FRAME_BYTES = 64 * 1024 * 1024;
+    private static final int MAX_FRAME_BYTES = resolveMaxFrameBytes();
     private static final java.util.List<String> SUPPORTED_TRANSPORT_PROTOCOL_CAPABILITIES = java.util.Collections.unmodifiableList(
             java.util.Arrays.asList(
                     io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability.JSON_FRAMED.name(),
@@ -194,6 +195,19 @@ public final class ExternalProcessProtocolCodec {
         byte[] bytes = new byte[length];
         dataInputStream.readFully(bytes);
         return OBJECT_MAPPER.readValue(bytes, MAP_TYPE);
+    }
+
+    private static int resolveMaxFrameBytes() {
+        String value = System.getProperty("lingonexus.externalProcess.maxFrameBytes");
+        if (value == null || value.trim().isEmpty()) {
+            return DEFAULT_MAX_FRAME_BYTES;
+        }
+        try {
+            int parsed = Integer.parseInt(value.trim());
+            return parsed > 0 ? parsed : DEFAULT_MAX_FRAME_BYTES;
+        } catch (NumberFormatException e) {
+            return DEFAULT_MAX_FRAME_BYTES;
+        }
     }
 
     private static void validateProtocolVersion(Map<String, Object> payload) throws IOException {
