@@ -1,9 +1,9 @@
 # Diagnostics API
 
-> Updated: 2026-03-10  
+> Updated: 2026-03-19  
 > Doc navigation: `docs/INDEX.md`  
 > Architecture baseline: `docs/architecture.md`  
-> Quick integration guide: `docs/quick-start.md`
+> Quick integration guide: `docs/quick-start.md`  
 
 
 ## Purpose
@@ -21,6 +21,27 @@ Use the following methods on `LingoNexusExecutor`:
 
 - `getStatistics()`
 - `getDiagnostics()`
+
+## Quick Triage Order
+
+When an execution fails in external-process mode, use this reading order first:
+
+1. Read `ScriptResult.metadata.errorStage`, `errorComponent`, and `errorReason`.
+2. If `errorStage = request_validation`, inspect `errorPath`, `errorValueType`, and `errorDetailReason` first.
+3. If `errorStage = protocol_negotiation`, inspect `latestProtocolNegotiationFailureReason` plus worker-supported capabilities/contracts.
+4. If `errorStage = borrow_worker`, inspect `latestBorrowFailureReason`, `borrowTimeoutCount`, `startupFailureCount`, and `healthCheckFailureCount`.
+5. If `errorStage = worker_execution`, inspect `latestWorkerExecutionFailureReason`, `discardCount`, and `failureReasonCounts`.
+6. Use `failureReasonCounts` last for trend-level context rather than first-response diagnosis.
+
+## First Check By Symptom
+
+| Symptom | Check First | Meaning |
+| --- | --- | --- |
+| Request rejected before real work starts | `errorStage`, `errorPath`, `errorDetailReason` | payload, custom policy, or module descriptor is incompatible before worker dispatch |
+| Worker reachable but handshake fails | `latestProtocolNegotiationFailureReason` | provider capability or serializer-contract mismatch |
+| Calls start hanging or failing before execution | `latestBorrowFailureReason`, `borrowTimeoutCount` | pool saturation, startup instability, or shutdown/lifecycle misuse |
+| Worker starts but execution fails | `latestWorkerExecutionFailureReason`, `discardCount` | timeout, crash, unavailability, or worker-side extension reconstruction problem |
+| Mixed recurring failures over time | `failureReasonCounts` | shows whether one failure family dominates or the environment is broadly unstable |
 
 ## Example
 
@@ -59,6 +80,20 @@ if (diagnostics.getExternalProcessStatistics() != null) {
     System.out.println("Worker-local executor cache misses: " + diagnostics.getExternalProcessStatistics().getExecutorCacheMisses());
     System.out.println("Worker-local executor cache evictions: " + diagnostics.getExternalProcessStatistics().getExecutorCacheEvictions());
 }
+```
+
+The maintained runnable example is:
+
+- `lingonexus-examples/src/main/java/io/github/koyan9/lingonexus/examples/DiagnosticsExample.java`
+- It now demonstrates:
+  - successful external-process execution
+  - a request-side compatibility failure that increments aggregated counts without borrowing a worker
+  - a worker-execution timeout that updates the worker-execution latest snapshot
+
+Current verification anchor for this document:
+
+```bash
+mvn -q -pl lingonexus-testcase/lingonexus-testcase-nospring -am -Dtest=EngineDiagnosticsFeatureTest -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
 ## Common External-Process Reason Codes
@@ -118,6 +153,7 @@ Action:
 
 - convert custom objects to JSON-safe maps / lists / strings before dispatch
 - reduce nested non-primitive values in request variables and metadata
+- if only `failureReasonCounts` changed while borrow/worker latest snapshots stayed `null`, the failure likely happened before any worker was borrowed
 
 ### 2. Handshake or protocol mismatch
 
@@ -138,6 +174,7 @@ Action:
 - compare required protocol capabilities with worker-supported capabilities
 - compare required serializer contracts with worker-supported serializer contracts
 - verify sandbox/provider selection and external-process compatibility filters
+- if this failure came back from worker metadata rather than the handshake call itself, the negotiation latest snapshot should still update to the same failure family
 
 ### 3. Borrow-side worker problem
 
@@ -159,6 +196,7 @@ Action:
 - `worker_borrow_timeout` indicates the pool hit its borrow wait limit (check `externalProcessBorrowTimeoutMs`, pool size, and worker health)
 - inspect whether the executor or worker pool was already shutting down
 - watch `startupFailureCount`, `healthCheckFailureCount`, and aggregated `failureReasonCounts`
+- if `failureReasonCounts` includes borrow-side reasons but `latestBorrowFailureReason` is `null`, you are likely looking at an outdated snapshot or an execution path that never reached the worker pool
 
 Quick distinction:
 
@@ -194,6 +232,16 @@ Action:
 - if counts are spread across many reasons, suspect broader environment instability or mixed misconfiguration
 - if only the latest reason changes but counts stay low, the issue may be transient rather than systemic
 - if the map includes `failure_reason_overflow`, it means unique reasons exceeded the tracking cap (128); use it as a signal to inspect logs for rare or highly variable failures
+
+## Example Reading Flow
+
+For a single failed result:
+
+1. look at `errorStage`
+2. if `request_validation`, stay on the result metadata and payload path fields
+3. otherwise open `diagnostics.getExternalProcessStatistics()`
+4. read the matching latest snapshot field for that stage
+5. use counts, discard/eviction totals, and worker capability lists only after the failure family is known
 
 ## Related Configuration
 
@@ -243,6 +291,8 @@ Spring Boot starter binding now also supports YAML-style configuration such as:
 - External worker statistics are most relevant when `isolationMode` is `EXTERNAL_PROCESS`.
 - Values may change quickly under concurrent load.
 - Worker-side failures returned in responses also contribute to `failureReasonCounts` and latest failure reason tracking.
+- Worker-side structured failures returned in responses now update the matching latest snapshot by `errorStage` as well: protocol-negotiation failures refresh negotiation snapshots, borrow-stage failures refresh borrow snapshots, and worker-execution failures refresh worker-execution snapshots.
+- Request-side compatibility failures raised before worker dispatch now also contribute to `failureReasonCounts`; when they happen before any worker borrow, the borrow / worker latest-failure snapshots remain unchanged.
 - Worker handshake data is now available from the first successful worker borrow because new workers perform an eager health-check before entering the reusable pool.
 - JSON-safe compatibility failures may include `errorPath`, `errorValueType`, and `errorDetailReason` for structured payload diagnostics.
 - External-process protocol frames are capped at 64 MB; oversized frames are rejected. Override with `-Dlingonexus.externalProcess.maxFrameBytes=<bytes>`.
@@ -256,4 +306,5 @@ Spring Boot starter binding now also supports YAML-style configuration such as:
 - Custom policy templates can inherit from built-in named policies or other custom templates; request-level named overrides are normalized to category masks before external-process dispatch so worker-side execution stays consistent.
 - Shared registries let multiple executors reuse one template catalog; local templates registered directly on a config still override registry entries with the same name.
 - Loader format uses keys like `resultMetadataPolicies.<name>.parent` and `resultMetadataPolicies.<name>.categories=timing,thread`.
-- The Spring Boot binding added in `lingonexus-spring-boot-starter` maps these concepts directly into `LingoNexusConfig`, but validation of the starter/testcase modules is currently limited by a local Maven repository/classpath issue in this environment.
+- The Spring Boot binding added in `lingonexus-spring-boot-starter` maps these concepts directly into `LingoNexusConfig`, but downstream module validation in this environment still works best with reactor-aware commands such as `-pl <module> -am`.
+- When validating diagnostics from a downstream module directly, prefer `-pl <module> -am` so the upstream reactor artifacts stay aligned during the run.

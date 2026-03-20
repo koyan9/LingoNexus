@@ -201,6 +201,17 @@ System.out.println(diagnostics.getIsolationMode());
 
 如果当前使用外部进程模式，还可以通过 `diagnostics.getExternalProcessStatistics()` 查看 worker 池状态。
 
+推荐排查顺序：
+
+1. 先看 `ScriptResult.metadata.errorStage` / `errorComponent` / `errorReason`
+2. 再看 `diagnostics.getExternalProcessStatistics()` 里的对应 latest failure snapshot
+3. 最后看 `failureReasonCounts`、`discardCount`、`borrowTimeoutCount` 这类趋势字段
+
+如果需要一个完整示例，优先看：
+
+- `lingonexus-examples/src/main/java/io/github/koyan9/lingonexus/examples/DiagnosticsExample.java`
+- `docs/diagnostics.md`
+
 ---
 
 ## 6. 常见迁移差异
@@ -216,9 +227,22 @@ System.out.println(diagnostics.getIsolationMode());
 
 ---
 
-## 7. 下一步读什么
+## 7. 配置参考
+
+完整的 Spring Boot 配置表（含默认值、作用与取值范围）已经整理在仓库入口文档中：
+
+- `README.md`
+- `README.zh-CN.md`
+
+如果你在独立模式使用 `LingoNexusConfig` Builder，可同时参考 `lingonexus-api` 的配置类注释。
+
+---
+
+## 8. 下一步读什么
 
 - 当前架构总览：`docs/architecture.md`
 - 诊断说明：`docs/diagnostics.md`
 - 性能基线：`docs/performance-baseline.md`
+- 性能报告索引：`docs/performance-reports/INDEX.md`
+- 基线脚本：`scripts/run-performance-baselines.ps1`
 - 示例代码：`lingonexus-examples/src/main/java/io/github/koyan9/lingonexus/examples/`

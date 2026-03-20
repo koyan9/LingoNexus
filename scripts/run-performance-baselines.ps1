@@ -1,6 +1,6 @@
 param(
     [string]$ReportPath,
-    [string]$Tests = 'ExternalProcessPerformanceBaselineTest,IsolationModeComparisonBaselineTest,LargeContextPerformanceBaselineTest,LargeContextIsolationModeComparisonBaselineTest,JavaJaninoCacheIdentityPerformanceBaselineTest',
+    [string]$Tests = 'ExternalProcessPerformanceBaselineTest,IsolationModeComparisonBaselineTest,LargeContextPerformanceBaselineTest,LargeContextIsolationModeComparisonBaselineTest,JavaJaninoCacheIdentityPerformanceBaselineTest,ResultMetadataProfilePerformanceBaselineTest,ContextSourceDistributionPerformanceBaselineTest,ModuleUsageComplexityPerformanceBaselineTest,FailureDiagnosticsPerformanceBaselineTest',
     [switch]$UseDedicatedRepo,
     [string]$MavenRepoPath,
     [switch]$SkipVerifiedBuild

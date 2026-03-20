@@ -1,6 +1,6 @@
 # Build Troubleshooting
 
-> Updated: 2026-03-09  
+> Updated: 2026-03-19  
 > Doc navigation: `docs/INDEX.md`  
 > Architecture baseline: `docs/architecture.md`  
 > Quick integration guide: `docs/quick-start.md`  
@@ -21,9 +21,28 @@ This suggests an environment-specific `javac` / reactor classpath behavior rathe
 
 ## Verified Workaround
 
-Install upstream modules into the local Maven repository first, then compile downstream modules separately.
+Prefer reactor-aware targeted commands first, then fall back to the verified script when wider Windows instability appears.
+
+Recommended order:
+
+1. run the smallest relevant Maven target with `-pl ... -am`
+2. if the target still fails because upstream artifacts or local repository state are out of sync, use `scripts/verified-build.ps1`
+3. only fall back to manual install-then-compile steps when you need to inspect module-by-module behavior
+
+Recently re-verified commands:
+
+```bash
+mvn -q -pl lingonexus-api,lingonexus-core,lingonexus-spring-boot-starter -am -DskipTests compile
+mvn -q -pl lingonexus-testcase/lingonexus-testcase-nospring -am -Dtest=ExternalProcessCompatibilityTest,EngineDiagnosticsFeatureTest -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+Key rule:
+
+- when targeting a downstream module directly, keep `-am` unless you already know all upstream reactor artifacts have been compiled or installed into the active local repository
 
 ## Scripted Workflow
+
+If you need broader local validation than a focused `-pl ... -am` command, use the verified script:
 
 You can run the verified module-by-module build flow with:
 
@@ -81,6 +100,16 @@ powershell.exe -ExecutionPolicy Bypass -File scripts/verified-build.ps1 -Mode Se
 
 # Full validation in an isolated local repository
 powershell.exe -ExecutionPolicy Bypass -File scripts/verified-build.ps1 -Mode Full -UseDedicatedRepo
+```
+
+Targeted Maven commands remain the fastest option for milestone work:
+
+```bash
+# Rebuild the active core/runtime path with upstream modules
+mvn -q -pl lingonexus-api,lingonexus-core,lingonexus-spring-boot-starter -am -DskipTests compile
+
+# Re-run focused external-process + diagnostics validation from the testcase module
+mvn -q -pl lingonexus-testcase/lingonexus-testcase-nospring -am -Dtest=ExternalProcessCompatibilityTest,EngineDiagnosticsFeatureTest -Dsurefire.failIfNoSpecifiedTests=false test
 ```
 
 Discovery commands:
@@ -199,10 +228,14 @@ The script compares the number of compiled classes in `target/classes` with the 
 
 ## Recommendation
 
-Until the reactor-classpath issue is fully resolved, prefer:
+Until the wider Windows reactor-classpath issue is fully resolved, prefer:
 
-- installing upstream modules first
-- compiling downstream modules independently
-- using focused module-by-module verification instead of one-shot full reactor validation
-- using `scripts/verified-build.ps1` as the default local verification path on Windows
+- running focused downstream verification with `-pl ... -am`
+- using `scripts/verified-build.ps1` when you need larger validation coverage or a clean dedicated repository
+- avoiding one-shot full-repository builds as the default feedback loop for milestone work
 - isolating build artifacts in `.verified-m2-repo` for more stable local verification
+
+Recent note:
+
+- the current working tree has also passed a repository-level `mvn -q test -Dsurefire.failIfNoSpecifiedTests=false` run
+- keep treating that as a wider confirmation step, not the default inner-loop command

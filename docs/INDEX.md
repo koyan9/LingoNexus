@@ -1,6 +1,6 @@
 # LingoNexus Documentation Index
 
-> Updated: 2026-03-10  
+> Updated: 2026-03-19  
 > Purpose: provide a single navigation page for the current documentation set.
 
 ## Start Here
@@ -11,7 +11,13 @@ If you are new to the repository, read in this order:
 2. `docs/quick-start.md`
 3. `docs/architecture.md`
 4. `docs/diagnostics.md`
-5. `docs/todo-plan.md`
+5. `docs/performance-baseline.md`
+6. `docs/todo-plan.md`
+
+Configuration reference (Spring Boot) lives in the README files and stays in sync with code defaults:
+
+- `README.md`
+- `README.zh-CN.md`
 
 ## Core Runtime Docs
 
@@ -21,6 +27,8 @@ If you are new to the repository, read in this order:
 | `docs/quick-start.md` | practical integration guide for Spring Boot and standalone usage |
 | `docs/requirements.md` | current product and engineering requirements |
 | `docs/diagnostics.md` | runtime diagnostics and metadata usage guidance |
+| `lingonexus-examples/src/main/java/io/github/koyan9/lingonexus/examples/DiagnosticsExample.java` | runnable diagnostics example covering success, request-validation, and worker-side failures |
+| `README.md` / `README.zh-CN.md` | Spring Boot configuration reference (defaults, ranges, examples) |
 
 ## Build and Verification
 
@@ -42,9 +50,13 @@ If you are new to the repository, read in this order:
 | `docs/milestone-m3-hot-path-optimization.md` | direct-path optimization milestone |
 | `docs/milestone-m4-performance-hardening.md` | performance baseline and hardening milestone |
 | `docs/milestone-v0.1.1.md` | legacy patch milestone reference |
+| `docs/release-notes-2026-03-20.md` | current stabilization / hardening wave summary |
 | `docs/release-notes-2026-03-09.md` | draft release/update summary for the current repository import and cleanup wave |
+| `docs/external-summary-2026-03-20.md` | short external-facing summary with current diagnostics + performance snapshot |
 | `docs/external-summary-2026-03-10.md` | short external-facing summary with latest performance snapshot |
 | `docs/todo-plan.md` | follow-up roadmap and prioritized tasks |
+
+Use `docs/build-troubleshooting.md` when you need the currently verified `-pl ... -am` validation commands for downstream modules.
 
 ## Performance and Optimization
 
@@ -53,6 +65,9 @@ If you are new to the repository, read in this order:
 | `docs/performance-baseline.md` | current benchmark focus and baseline notes, including Janino cache-identity baselines |
 | `docs/performance-reports/INDEX.md` | how to generate and find the latest performance reports |
 | `scripts/run-performance-baselines.ps1` | runs selected baseline tests and generates local/CI performance reports on demand |
+
+Use `docs/diagnostics.md` first when you are responding to one failure.
+Use `docs/performance-baseline.md` first when you are evaluating regression trends or hot-path changes.
 
 ## Which Docs Are Source-of-Truth?
 
@@ -77,3 +92,5 @@ Whenever the public API, integration flow, isolation modes, or major architectur
 - `docs/architecture.md`
 - `docs/project-status.md`
 - `docs/INDEX.md`
+- `docs/build-troubleshooting.md`
+- `docs/todo-plan.md`
