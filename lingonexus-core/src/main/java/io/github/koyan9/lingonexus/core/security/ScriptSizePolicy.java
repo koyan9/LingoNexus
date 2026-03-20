@@ -22,6 +22,8 @@ import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.security.SecurityPolicy;
 import io.github.koyan9.lingonexus.api.security.ValidationResult;
 
+import java.nio.charset.StandardCharsets;
+
 /**
  * 脚本大小限制策略
  *
@@ -39,7 +41,7 @@ public class ScriptSizePolicy implements SecurityPolicy {
             return ValidationResult.failure("Script cannot be null");
         }
 
-        int scriptSize = script.getBytes().length;
+        int scriptSize = script.getBytes(StandardCharsets.UTF_8).length;
         int maxScriptSize = config.getMaxScriptSize();
 
         if (scriptSize <= 0) {

@@ -26,6 +26,13 @@ import io.github.koyan9.lingonexus.api.facade.LingoNexusExecutor;
 import io.github.koyan9.lingonexus.api.lang.ScriptLanguage;
 import io.github.koyan9.lingonexus.api.result.ResultMetadataPolicyRegistry;
 import io.github.koyan9.lingonexus.api.result.ResultMetadataPolicyTemplate;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode;
 import io.github.koyan9.lingonexus.core.LingoNexusBuilder;
 import io.github.koyan9.lingonexus.core.context.GlobalVariableManager;
 import org.slf4j.Logger;
@@ -37,6 +44,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Map;
+import java.util.Set;
 
 /**
  * LingoNexus Spring Boot 自动配置
@@ -77,7 +85,7 @@ public class LingoNexusAutoConfiguration {
 
         ResultMetadataPolicyRegistry resultMetadataPolicyRegistry = createResultMetadataPolicyRegistry(properties.getMetadata());
 
-        return LingoNexusConfig.builder()
+        LingoNexusConfig.Builder builder = LingoNexusConfig.builder()
                 .defaultLanguage(properties.getDefaultLanguage() != null
                         ? ScriptLanguage.fromString(properties.getDefaultLanguage())
                         : ScriptLanguage.getDefault())
@@ -130,8 +138,64 @@ public class LingoNexusAutoConfiguration {
                 .resultMetadataPolicyName(properties.getMetadata().getPolicyName())
                 .resultMetadataCategories(properties.getMetadata().getCategories())
                 .resultMetadataPolicyRegistry(resultMetadataPolicyRegistry)
-                .variableManager(variableManager)
-                .build();
+                .variableManager(variableManager);
+
+        Set<String> allowedSandboxImplementations = properties.getAllowedSandboxImplementations();
+        if (allowedSandboxImplementations != null && !allowedSandboxImplementations.isEmpty()) {
+            builder.allowedSandboxImplementation(allowedSandboxImplementations.toArray(new String[0]));
+        }
+
+        Set<String> allowedSandboxLanguages = properties.getAllowedSandboxLanguages();
+        if (allowedSandboxLanguages != null && !allowedSandboxLanguages.isEmpty()) {
+            builder.allowedSandboxLanguage(allowedSandboxLanguages.toArray(new String[0]));
+        }
+
+        Set<SandboxHostAccessMode> allowedSandboxHostAccessModes = properties.getAllowedSandboxHostAccessModes();
+        if (allowedSandboxHostAccessModes != null && !allowedSandboxHostAccessModes.isEmpty()) {
+            builder.allowedSandboxHostAccessMode(allowedSandboxHostAccessModes.toArray(new SandboxHostAccessMode[0]));
+        }
+
+        Set<SandboxHostRestrictionMode> allowedSandboxHostRestrictionModes = properties.getAllowedSandboxHostRestrictionModes();
+        if (allowedSandboxHostRestrictionModes != null && !allowedSandboxHostRestrictionModes.isEmpty()) {
+            builder.allowedSandboxHostRestrictionMode(allowedSandboxHostRestrictionModes.toArray(new SandboxHostRestrictionMode[0]));
+        }
+
+        Set<SandboxHostRestrictionFlag> requiredSandboxHostRestrictionFlags = properties.getRequiredSandboxHostRestrictionFlags();
+        if (requiredSandboxHostRestrictionFlags != null && !requiredSandboxHostRestrictionFlags.isEmpty()) {
+            builder.requireSandboxHostRestrictionFlag(requiredSandboxHostRestrictionFlags.toArray(new SandboxHostRestrictionFlag[0]));
+        }
+
+        Set<SandboxResultTransportMode> allowedSandboxResultTransportModes = properties.getAllowedSandboxResultTransportModes();
+        if (allowedSandboxResultTransportModes != null && !allowedSandboxResultTransportModes.isEmpty()) {
+            builder.allowedSandboxResultTransportMode(allowedSandboxResultTransportModes.toArray(new SandboxResultTransportMode[0]));
+        }
+
+        Set<SandboxTransportSerializerMode> allowedSandboxTransportSerializerModes = properties.getAllowedSandboxTransportSerializerModes();
+        if (allowedSandboxTransportSerializerModes != null && !allowedSandboxTransportSerializerModes.isEmpty()) {
+            builder.allowedSandboxTransportSerializerMode(allowedSandboxTransportSerializerModes.toArray(new SandboxTransportSerializerMode[0]));
+        }
+
+        Set<SandboxTransportPayloadProfile> allowedSandboxTransportPayloadProfiles = properties.getAllowedSandboxTransportPayloadProfiles();
+        if (allowedSandboxTransportPayloadProfiles != null && !allowedSandboxTransportPayloadProfiles.isEmpty()) {
+            builder.allowedSandboxTransportPayloadProfile(allowedSandboxTransportPayloadProfiles.toArray(new SandboxTransportPayloadProfile[0]));
+        }
+
+        Set<SandboxTransportProtocolCapability> requiredSandboxTransportProtocolCapabilities = properties.getRequiredSandboxTransportProtocolCapabilities();
+        if (requiredSandboxTransportProtocolCapabilities != null && !requiredSandboxTransportProtocolCapabilities.isEmpty()) {
+            builder.requireSandboxTransportProtocolCapability(requiredSandboxTransportProtocolCapabilities.toArray(new SandboxTransportProtocolCapability[0]));
+        }
+
+        Set<String> requiredSandboxTransportSerializerContractIds = properties.getRequiredSandboxTransportSerializerContractIds();
+        if (requiredSandboxTransportSerializerContractIds != null && !requiredSandboxTransportSerializerContractIds.isEmpty()) {
+            builder.requireSandboxTransportSerializerContractId(requiredSandboxTransportSerializerContractIds.toArray(new String[0]));
+        }
+
+        builder.requireEngineCacheCapableSandbox(properties.isRequireEngineCacheCapableSandbox());
+        builder.requireExternalProcessCompatibleSandbox(properties.isRequireExternalProcessCompatibleSandbox());
+        builder.requireJsonSafeExternalResult(properties.isRequireJsonSafeExternalResult());
+        builder.requireJsonSafeExternalMetadata(properties.isRequireJsonSafeExternalMetadata());
+
+        return builder.build();
     }
 
     /**

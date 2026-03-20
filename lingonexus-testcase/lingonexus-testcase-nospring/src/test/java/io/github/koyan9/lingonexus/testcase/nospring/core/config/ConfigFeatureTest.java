@@ -29,6 +29,7 @@ import io.github.koyan9.lingonexus.core.LingoNexusBuilder;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -198,6 +199,46 @@ class ConfigFeatureTest {
         // Then - 应该失败（安全检查生效）
         assertFalse(result.isSuccess());
         assertNotNull(result.getErrorMessage());
+    }
+
+    @Test
+    @DisplayName("Should enforce script size in UTF-8 bytes")
+    void shouldEnforceScriptSizeInUtf8Bytes() {
+        String script = "return '中中中'";
+        int utf8Size = script.getBytes(StandardCharsets.UTF_8).length;
+        assertTrue(utf8Size > script.length());
+
+        LingoNexusConfig limitedConfig = LingoNexusConfig.builder()
+                .defaultLanguage(ScriptLanguage.GROOVY)
+                .sandboxConfig(SandboxConfig.builder()
+                        .enabled(true)
+                        .maxScriptSize(utf8Size - 1)
+                        .build())
+                .build();
+        LingoNexusExecutor limitedExecutor = LingoNexusBuilder.createNewInstance(limitedConfig);
+        try {
+            ScriptResult limitedResult = limitedExecutor.execute(script, ScriptLanguage.GROOVY.name(),
+                    ScriptContext.of(new HashMap<String, Object>()));
+            assertFalse(limitedResult.isSuccess());
+        } finally {
+            limitedExecutor.close();
+        }
+
+        LingoNexusConfig exactConfig = LingoNexusConfig.builder()
+                .defaultLanguage(ScriptLanguage.GROOVY)
+                .sandboxConfig(SandboxConfig.builder()
+                        .enabled(true)
+                        .maxScriptSize(utf8Size)
+                        .build())
+                .build();
+        LingoNexusExecutor exactExecutor = LingoNexusBuilder.createNewInstance(exactConfig);
+        try {
+            ScriptResult exactResult = exactExecutor.execute(script, ScriptLanguage.GROOVY.name(),
+                    ScriptContext.of(new HashMap<String, Object>()));
+            assertTrue(exactResult.isSuccess());
+        } finally {
+            exactExecutor.close();
+        }
     }
 
     @Test

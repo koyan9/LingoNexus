@@ -24,6 +24,13 @@ import io.github.koyan9.lingonexus.api.lang.ScriptLanguage;
 import io.github.koyan9.lingonexus.api.result.ResultMetadataCategory;
 import io.github.koyan9.lingonexus.api.result.ResultMetadataPolicy;
 import io.github.koyan9.lingonexus.api.result.ResultMetadataProfile;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostAccessMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionFlag;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxHostRestrictionMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxResultTransportMode;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportPayloadProfile;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportProtocolCapability;
+import io.github.koyan9.lingonexus.api.sandbox.spi.SandboxTransportSerializerMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.HashMap;
@@ -91,6 +98,20 @@ public class LingoNexusProperties {
     private MetadataProperties metadata = new MetadataProperties();
     private Set<String> excludeScriptModules;
     private Set<String> allowedScriptModules;
+    private Set<String> allowedSandboxImplementations;
+    private Set<String> allowedSandboxLanguages;
+    private Set<SandboxHostAccessMode> allowedSandboxHostAccessModes;
+    private Set<SandboxHostRestrictionMode> allowedSandboxHostRestrictionModes;
+    private Set<SandboxHostRestrictionFlag> requiredSandboxHostRestrictionFlags;
+    private Set<SandboxResultTransportMode> allowedSandboxResultTransportModes;
+    private Set<SandboxTransportSerializerMode> allowedSandboxTransportSerializerModes;
+    private Set<SandboxTransportPayloadProfile> allowedSandboxTransportPayloadProfiles;
+    private Set<SandboxTransportProtocolCapability> requiredSandboxTransportProtocolCapabilities;
+    private Set<String> requiredSandboxTransportSerializerContractIds;
+    private boolean requireEngineCacheCapableSandbox;
+    private boolean requireExternalProcessCompatibleSandbox;
+    private boolean requireJsonSafeExternalResult;
+    private boolean requireJsonSafeExternalMetadata;
     private Map<String, Object> globalVariables = new HashMap<>();
 
     public boolean isEnabled() {
@@ -163,6 +184,118 @@ public class LingoNexusProperties {
 
     public void setAllowedScriptModules(Set<String> allowedScriptModules) {
         this.allowedScriptModules = allowedScriptModules;
+    }
+
+    public Set<String> getAllowedSandboxImplementations() {
+        return allowedSandboxImplementations;
+    }
+
+    public void setAllowedSandboxImplementations(Set<String> allowedSandboxImplementations) {
+        this.allowedSandboxImplementations = allowedSandboxImplementations;
+    }
+
+    public Set<String> getAllowedSandboxLanguages() {
+        return allowedSandboxLanguages;
+    }
+
+    public void setAllowedSandboxLanguages(Set<String> allowedSandboxLanguages) {
+        this.allowedSandboxLanguages = allowedSandboxLanguages;
+    }
+
+    public Set<SandboxHostAccessMode> getAllowedSandboxHostAccessModes() {
+        return allowedSandboxHostAccessModes;
+    }
+
+    public void setAllowedSandboxHostAccessModes(Set<SandboxHostAccessMode> allowedSandboxHostAccessModes) {
+        this.allowedSandboxHostAccessModes = allowedSandboxHostAccessModes;
+    }
+
+    public Set<SandboxHostRestrictionMode> getAllowedSandboxHostRestrictionModes() {
+        return allowedSandboxHostRestrictionModes;
+    }
+
+    public void setAllowedSandboxHostRestrictionModes(Set<SandboxHostRestrictionMode> allowedSandboxHostRestrictionModes) {
+        this.allowedSandboxHostRestrictionModes = allowedSandboxHostRestrictionModes;
+    }
+
+    public Set<SandboxHostRestrictionFlag> getRequiredSandboxHostRestrictionFlags() {
+        return requiredSandboxHostRestrictionFlags;
+    }
+
+    public void setRequiredSandboxHostRestrictionFlags(Set<SandboxHostRestrictionFlag> requiredSandboxHostRestrictionFlags) {
+        this.requiredSandboxHostRestrictionFlags = requiredSandboxHostRestrictionFlags;
+    }
+
+    public Set<SandboxResultTransportMode> getAllowedSandboxResultTransportModes() {
+        return allowedSandboxResultTransportModes;
+    }
+
+    public void setAllowedSandboxResultTransportModes(Set<SandboxResultTransportMode> allowedSandboxResultTransportModes) {
+        this.allowedSandboxResultTransportModes = allowedSandboxResultTransportModes;
+    }
+
+    public Set<SandboxTransportSerializerMode> getAllowedSandboxTransportSerializerModes() {
+        return allowedSandboxTransportSerializerModes;
+    }
+
+    public void setAllowedSandboxTransportSerializerModes(Set<SandboxTransportSerializerMode> allowedSandboxTransportSerializerModes) {
+        this.allowedSandboxTransportSerializerModes = allowedSandboxTransportSerializerModes;
+    }
+
+    public Set<SandboxTransportPayloadProfile> getAllowedSandboxTransportPayloadProfiles() {
+        return allowedSandboxTransportPayloadProfiles;
+    }
+
+    public void setAllowedSandboxTransportPayloadProfiles(Set<SandboxTransportPayloadProfile> allowedSandboxTransportPayloadProfiles) {
+        this.allowedSandboxTransportPayloadProfiles = allowedSandboxTransportPayloadProfiles;
+    }
+
+    public Set<SandboxTransportProtocolCapability> getRequiredSandboxTransportProtocolCapabilities() {
+        return requiredSandboxTransportProtocolCapabilities;
+    }
+
+    public void setRequiredSandboxTransportProtocolCapabilities(Set<SandboxTransportProtocolCapability> requiredSandboxTransportProtocolCapabilities) {
+        this.requiredSandboxTransportProtocolCapabilities = requiredSandboxTransportProtocolCapabilities;
+    }
+
+    public Set<String> getRequiredSandboxTransportSerializerContractIds() {
+        return requiredSandboxTransportSerializerContractIds;
+    }
+
+    public void setRequiredSandboxTransportSerializerContractIds(Set<String> requiredSandboxTransportSerializerContractIds) {
+        this.requiredSandboxTransportSerializerContractIds = requiredSandboxTransportSerializerContractIds;
+    }
+
+    public boolean isRequireEngineCacheCapableSandbox() {
+        return requireEngineCacheCapableSandbox;
+    }
+
+    public void setRequireEngineCacheCapableSandbox(boolean requireEngineCacheCapableSandbox) {
+        this.requireEngineCacheCapableSandbox = requireEngineCacheCapableSandbox;
+    }
+
+    public boolean isRequireExternalProcessCompatibleSandbox() {
+        return requireExternalProcessCompatibleSandbox;
+    }
+
+    public void setRequireExternalProcessCompatibleSandbox(boolean requireExternalProcessCompatibleSandbox) {
+        this.requireExternalProcessCompatibleSandbox = requireExternalProcessCompatibleSandbox;
+    }
+
+    public boolean isRequireJsonSafeExternalResult() {
+        return requireJsonSafeExternalResult;
+    }
+
+    public void setRequireJsonSafeExternalResult(boolean requireJsonSafeExternalResult) {
+        this.requireJsonSafeExternalResult = requireJsonSafeExternalResult;
+    }
+
+    public boolean isRequireJsonSafeExternalMetadata() {
+        return requireJsonSafeExternalMetadata;
+    }
+
+    public void setRequireJsonSafeExternalMetadata(boolean requireJsonSafeExternalMetadata) {
+        this.requireJsonSafeExternalMetadata = requireJsonSafeExternalMetadata;
     }
 
     public Map<String, Object> getGlobalVariables() {
