@@ -539,8 +539,8 @@ class ExternalProcessScriptExecutorFeatureTest {
     }
 
     @Test
-    @DisplayName("Should not update latest worker execution failure when stage is protocol negotiation")
-    void shouldNotUpdateLatestWorkerExecutionFailureWhenStageIsProtocolNegotiation() {
+    @DisplayName("Should track protocol negotiation failure returned in worker metadata without polluting worker execution latest")
+    void shouldTrackProtocolNegotiationFailureReturnedInWorkerMetadata() {
         ExternalProcessWorkerPool workerPool = new ExternalProcessWorkerPool(
                 "java",
                 "ignored",
@@ -570,6 +570,47 @@ class ExternalProcessScriptExecutorFeatureTest {
             assertEquals("external-worker-handshake", result.getMetadata().get(ResultMetadataKeys.ERROR_COMPONENT));
             assertEquals("protocol_handshake_failed", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
             assertEquals(1L, executor.getFailureReasonCounts().get("protocol_handshake_failed"));
+            assertEquals("simulated handshake failure", executor.getLatestProtocolNegotiationFailureReason());
+            assertEquals(1L, executor.getProtocolNegotiationFailureCount());
+            assertEquals(null, executor.getLatestWorkerExecutionFailureReason());
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    @DisplayName("Should track borrow failure returned in worker metadata without polluting worker execution latest")
+    void shouldTrackBorrowFailureReturnedInWorkerMetadata() {
+        ExternalProcessWorkerPool workerPool = new ExternalProcessWorkerPool(
+                "java",
+                "ignored",
+                1,
+                0,
+                0,
+                0L,
+                (javaCommand, classpath) -> {
+                    throw new AssertionError("Worker factory should not be used in this scenario");
+                }
+        ) {
+            @Override
+            public ExternalProcessWorkerClient borrowWorker() {
+                return new BorrowStageFailureWorker();
+            }
+
+            @Override
+            public void returnWorker(ExternalProcessWorkerClient worker) {
+            }
+        };
+        ExternalProcessScriptExecutor executor = new ExternalProcessScriptExecutor(workerPool);
+        try {
+            ScriptResult result = executor.execute(ExternalProcessExecutionRequest.healthCheck(), 1000L);
+
+            assertFalse(result.isSuccess());
+            assertEquals("borrow_worker", result.getMetadata().get(ResultMetadataKeys.ERROR_STAGE));
+            assertEquals("external-worker-pool", result.getMetadata().get(ResultMetadataKeys.ERROR_COMPONENT));
+            assertEquals("worker_pool_shutdown", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
+            assertEquals(1L, executor.getFailureReasonCounts().get("worker_pool_shutdown"));
+            assertEquals("worker_pool_shutdown", executor.getLatestBorrowFailureReason());
             assertEquals(null, executor.getLatestWorkerExecutionFailureReason());
         } finally {
             executor.shutdown();
@@ -911,7 +952,35 @@ class ExternalProcessScriptExecutorFeatureTest {
             metadata.put(ResultMetadataKeys.ERROR_STAGE, "protocol_negotiation");
             metadata.put(ResultMetadataKeys.ERROR_COMPONENT, "external-worker-handshake");
             metadata.put(ResultMetadataKeys.ERROR_REASON, "protocol_handshake_failed");
+            metadata.put(ResultMetadataKeys.ERROR_MESSAGE, "simulated handshake failure");
             return new ExternalProcessExecutionResponse(false, "FAILURE", null, "simulated handshake failure", metadata, 5L);
+        }
+    }
+
+    private static final class BorrowStageFailureWorker extends ExternalProcessWorkerClient {
+
+        private BorrowStageFailureWorker() {
+            super();
+        }
+
+        @Override
+        public boolean isAlive() {
+            return true;
+        }
+
+        @Override
+        public String getProtocolVersion() {
+            return "1";
+        }
+
+        @Override
+        public synchronized ExternalProcessExecutionResponse execute(ExternalProcessExecutionRequest request, long timeoutMs) {
+            java.util.Map<String, Object> metadata = new java.util.HashMap<String, Object>();
+            metadata.put(ResultMetadataKeys.ERROR_STAGE, "borrow_worker");
+            metadata.put(ResultMetadataKeys.ERROR_COMPONENT, "external-worker-pool");
+            metadata.put(ResultMetadataKeys.ERROR_REASON, "worker_pool_shutdown");
+            metadata.put(ResultMetadataKeys.ERROR_MESSAGE, "simulated pool shutdown");
+            return new ExternalProcessExecutionResponse(false, "FAILURE", null, "simulated pool shutdown", metadata, 5L);
         }
     }
 

@@ -40,6 +40,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DisplayName("External Process Compatibility Tests")
@@ -153,6 +154,41 @@ class ExternalProcessCompatibilityTest {
             assertEquals("external-process-compatibility", result.getMetadata().get(ResultMetadataKeys.ERROR_COMPONENT));
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertEquals("request_payload_not_json_safe", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
+        } finally {
+            executor.close();
+        }
+    }
+
+    @Test
+    @DisplayName("Should record request validation failure in diagnostics without borrowing a worker")
+    void shouldRecordRequestValidationFailureInDiagnosticsWithoutBorrowingAWorker() {
+        LingoNexusExecutor executor = LingoNexusBuilder.createNewInstance(
+                LingoNexusConfig.builder()
+                        .defaultLanguage(ScriptLanguage.GROOVY)
+                        .allowedSandboxLanguage(ScriptLanguage.GROOVY)
+                        .sandboxConfig(SandboxConfig.builder()
+                                .enabled(true)
+                                .timeoutMs(3000)
+                                .isolationMode(ExecutionIsolationMode.EXTERNAL_PROCESS)
+                                .externalProcessPrewarmCount(0)
+                                .build())
+                        .build()
+        );
+
+        try {
+            Map<String, Object> vars = new HashMap<String, Object>();
+            vars.put("value", new Object());
+            ScriptResult result = executor.execute("return value", "groovy", ScriptContext.of(vars));
+
+            assertFalse(result.isSuccess());
+            assertEquals("request_validation", result.getMetadata().get(ResultMetadataKeys.ERROR_STAGE));
+            assertEquals("request_payload_not_json_safe", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
+
+            assertEquals(0, executor.getDiagnostics().getExternalProcessStatistics().getCreatedWorkers());
+            assertEquals(0L, executor.getDiagnostics().getExternalProcessStatistics().getBorrowCount());
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("request_payload_not_json_safe"));
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestBorrowFailureReason());
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
         } finally {
             executor.close();
         }
@@ -535,6 +571,9 @@ class ExternalProcessCompatibilityTest {
             assertEquals("security_policy_not_external_process_compatible", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertTrue(result.getErrorMessage().contains(IncompatibleDescriptorPolicy.class.getName()));
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("security_policy_not_external_process_compatible"));
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestBorrowFailureReason());
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
         } finally {
             executor.close();
         }
@@ -565,6 +604,9 @@ class ExternalProcessCompatibilityTest {
             assertEquals("security_policy_descriptor_not_json_safe", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertTrue(result.getErrorMessage().contains("$.securityPolicies.bad"));
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("security_policy_descriptor_not_json_safe"));
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestBorrowFailureReason());
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
         } finally {
             executor.close();
         }
@@ -595,6 +637,9 @@ class ExternalProcessCompatibilityTest {
             assertEquals("script_module_descriptor_not_json_safe", result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertTrue(result.getErrorMessage().contains("$.scriptModules.bad"));
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("script_module_descriptor_not_json_safe"));
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestBorrowFailureReason());
+            assertNull(executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
         } finally {
             executor.close();
         }
@@ -625,6 +670,8 @@ class ExternalProcessCompatibilityTest {
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertTrue(result.getErrorMessage().contains(FailingFactoryPolicy.class.getName()));
             assertTrue(result.getErrorMessage().contains("simulated factory failure"));
+            assertEquals("security_policy_descriptor_load_failed", executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("security_policy_descriptor_load_failed"));
         } finally {
             executor.close();
         }
@@ -656,6 +703,8 @@ class ExternalProcessCompatibilityTest {
             assertEquals("ExternalProcessCompatibilityException", result.getMetadata().get(ResultMetadataKeys.ERROR_TYPE));
             assertTrue(result.getErrorMessage().contains(FailingFactoryModule.class.getName()));
             assertTrue(result.getErrorMessage().contains("simulated factory failure"));
+            assertEquals("script_module_descriptor_load_failed", executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("script_module_descriptor_load_failed"));
         } finally {
             executor.close();
         }
@@ -716,6 +765,8 @@ class ExternalProcessCompatibilityTest {
             assertEquals("$", result.getMetadata().get(ResultMetadataKeys.ERROR_PATH));
             assertEquals(Integer.class.getName(), result.getMetadata().get(ResultMetadataKeys.ERROR_VALUE_TYPE));
             assertEquals("map_key_not_string", result.getMetadata().get(ResultMetadataKeys.ERROR_DETAIL_REASON));
+            assertEquals("response_payload_not_json_safe", executor.getDiagnostics().getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
+            assertEquals(1L, executor.getDiagnostics().getExternalProcessStatistics().getFailureReasonCounts().get("response_payload_not_json_safe"));
         } finally {
             executor.close();
         }

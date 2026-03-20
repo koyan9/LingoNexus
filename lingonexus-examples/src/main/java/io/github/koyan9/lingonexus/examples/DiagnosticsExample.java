@@ -18,6 +18,7 @@ package io.github.koyan9.lingonexus.examples;
 
 import io.github.koyan9.lingonexus.api.config.LingoNexusConfig;
 import io.github.koyan9.lingonexus.api.config.SandboxConfig;
+import io.github.koyan9.lingonexus.api.constant.LingoNexusConstants.ResultMetadataKeys;
 import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.executor.isolation.ExecutionIsolationMode;
 import io.github.koyan9.lingonexus.api.facade.LingoNexusExecutor;
@@ -41,7 +42,7 @@ public class DiagnosticsExample {
                 .defaultLanguage(ScriptLanguage.GROOVY)
                 .sandboxConfig(SandboxConfig.builder()
                         .enabled(true)
-                        .timeoutMs(2000)
+                        .timeoutMs(800)
                         .isolationMode(ExecutionIsolationMode.EXTERNAL_PROCESS)
                         .externalProcessPoolSize(2)
                         .externalProcessPrewarmCount(1)
@@ -56,10 +57,22 @@ public class DiagnosticsExample {
 
             ScriptResult result1 = executor.execute("return value * 2", "groovy", ScriptContext.of(vars));
             ScriptResult result2 = executor.execute("return 100 + 23", "groovy", ScriptContext.of(Collections.emptyMap()));
+            ScriptResult requestValidationFailure = executor.execute(
+                    "return value",
+                    "groovy",
+                    ScriptContext.of(Collections.<String, Object>singletonMap("value", new Object()))
+            );
+            ScriptResult workerTimeoutFailure = executor.execute(
+                    "Thread.sleep(1200); return 1",
+                    "groovy",
+                    ScriptContext.of(Collections.emptyMap())
+            );
 
             System.out.println("=== Diagnostics Example ===");
             System.out.println("Result 1: " + result1.getValue());
             System.out.println("Result 2: " + result2.getValue());
+            printFailure("Request validation failure", requestValidationFailure);
+            printFailure("Worker timeout failure", workerTimeoutFailure);
 
             EngineStatistics statistics = executor.getStatistics();
             EngineDiagnostics diagnostics = executor.getDiagnostics();
@@ -88,13 +101,38 @@ public class DiagnosticsExample {
                 System.out.println("Eviction Count: " + diagnostics.getExternalProcessStatistics().getEvictionCount());
                 System.out.println("Startup Failure Count: " + diagnostics.getExternalProcessStatistics().getStartupFailureCount());
                 System.out.println("Health Check Failure Count: " + diagnostics.getExternalProcessStatistics().getHealthCheckFailureCount());
+                System.out.println("Worker Protocol Version: " + diagnostics.getExternalProcessStatistics().getWorkerProtocolVersion());
+                System.out.println("Worker Protocol Capabilities: " + diagnostics.getExternalProcessStatistics().getSupportedTransportProtocolCapabilities());
+                System.out.println("Worker Serializer Contracts: " + diagnostics.getExternalProcessStatistics().getSupportedTransportSerializerContractIds());
+                System.out.println("Protocol Negotiation Failure Count: " + diagnostics.getExternalProcessStatistics().getProtocolNegotiationFailureCount());
+                System.out.println("Latest Protocol Negotiation Failure: " + diagnostics.getExternalProcessStatistics().getLatestProtocolNegotiationFailureReason());
+                System.out.println("Latest Borrow Failure: " + diagnostics.getExternalProcessStatistics().getLatestBorrowFailureReason());
+                System.out.println("Latest Worker Execution Failure: " + diagnostics.getExternalProcessStatistics().getLatestWorkerExecutionFailureReason());
+                System.out.println("Failure Reason Counts: " + diagnostics.getExternalProcessStatistics().getFailureReasonCounts());
                 System.out.println("Executor Cache Size: " + diagnostics.getExternalProcessStatistics().getExecutorCacheSize());
                 System.out.println("Executor Cache Hits: " + diagnostics.getExternalProcessStatistics().getExecutorCacheHits());
                 System.out.println("Executor Cache Misses: " + diagnostics.getExternalProcessStatistics().getExecutorCacheMisses());
                 System.out.println("Executor Cache Evictions: " + diagnostics.getExternalProcessStatistics().getExecutorCacheEvictions());
+
+                System.out.println("\n--- Quick Triage Hints ---");
+                System.out.println("Request-side failures increment counts but do not set borrow/worker latest snapshots.");
+                System.out.println("Protocol failures: read Latest Protocol Negotiation Failure first.");
+                System.out.println("Borrow failures: read Latest Borrow Failure first.");
+                System.out.println("Worker failures: read Latest Worker Execution Failure first.");
             }
         } finally {
             executor.close();
         }
+    }
+
+    private static void printFailure(String label, ScriptResult result) {
+        System.out.println("\n--- " + label + " ---");
+        System.out.println("Success: " + result.isSuccess());
+        System.out.println("Status: " + result.getStatus());
+        System.out.println("Error Stage: " + result.getMetadata().get(ResultMetadataKeys.ERROR_STAGE));
+        System.out.println("Error Component: " + result.getMetadata().get(ResultMetadataKeys.ERROR_COMPONENT));
+        System.out.println("Error Reason: " + result.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
+        System.out.println("Error Path: " + result.getMetadata().get(ResultMetadataKeys.ERROR_PATH));
+        System.out.println("Error Detail Reason: " + result.getMetadata().get(ResultMetadataKeys.ERROR_DETAIL_REASON));
     }
 }

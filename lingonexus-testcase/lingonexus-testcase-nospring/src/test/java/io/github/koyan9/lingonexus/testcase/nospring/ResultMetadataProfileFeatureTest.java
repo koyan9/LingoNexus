@@ -118,6 +118,25 @@ class ResultMetadataProfileFeatureTest {
         }
     }
 
+    @Test
+    @DisplayName("Should ignore invalid category override and fall back to engine profile")
+    void shouldIgnoreInvalidCategoryOverrideAndFallBackToEngineProfile() {
+        LingoNexusExecutor executor = createExecutor(ExecutionIsolationMode.DIRECT, ResultMetadataProfile.TIMING);
+        try {
+            ScriptContext context = ScriptContext.builder()
+                    .put("value", 21)
+                    .putMetadata(MetadataKeys.RESULT_METADATA_CATEGORIES, "unknown-category")
+                    .build();
+
+            ScriptResult result = executor.execute("return value * 2", "groovy", context);
+            Map<String, Object> metadata = result.getMetadata();
+            assertNotNull(metadata.get(ResultMetadataKeys.TOTAL_TIME));
+            assertFalse(metadata.containsKey(ResultMetadataKeys.THREAD_NAME));
+        } finally {
+            executor.close();
+        }
+    }
+
     private LingoNexusExecutor createExecutor(ExecutionIsolationMode isolationMode,
                                               ResultMetadataProfile resultMetadataProfile) {
         return LingoNexusBuilder.createNewInstance(

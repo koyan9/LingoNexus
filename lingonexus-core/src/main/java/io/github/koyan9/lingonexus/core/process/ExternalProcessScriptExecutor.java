@@ -171,6 +171,26 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
         }
     }
 
+    public void recordCompatibilityFailure(ExternalProcessCompatibilityException exception) {
+        if (exception == null) {
+            return;
+        }
+        String reason = exception.getReason();
+        if (reason == null || reason.trim().isEmpty()) {
+            return;
+        }
+        String stage = exception.getStage();
+        if (STAGE_PROTOCOL_NEGOTIATION.equals(stage)) {
+            latestProtocolNegotiationFailureReason = exception.getMessage();
+            protocolNegotiationFailureCount.incrementAndGet();
+        } else if (STAGE_BORROW_WORKER.equals(stage)) {
+            latestBorrowFailureReason = reason;
+        } else if (STAGE_WORKER_EXECUTION.equals(stage)) {
+            latestWorkerExecutionFailureReason = reason;
+        }
+        recordFailureReason(reason);
+    }
+
     @Override
     public void shutdown() {
         workerPool.shutdown();
@@ -331,7 +351,15 @@ public class ExternalProcessScriptExecutor implements LifecycleAware {
         }
         Object stage = metadata.get(ResultMetadataKeys.ERROR_STAGE);
         String stageText = stage != null ? String.valueOf(stage) : null;
-        if (stageText == null || STAGE_WORKER_EXECUTION.equals(stageText)) {
+        if (STAGE_PROTOCOL_NEGOTIATION.equals(stageText)) {
+            Object message = metadata.get(ResultMetadataKeys.ERROR_MESSAGE);
+            latestProtocolNegotiationFailureReason = message != null && !String.valueOf(message).trim().isEmpty()
+                    ? String.valueOf(message)
+                    : reasonText;
+            protocolNegotiationFailureCount.incrementAndGet();
+        } else if (STAGE_BORROW_WORKER.equals(stageText)) {
+            latestBorrowFailureReason = reasonText;
+        } else if (stageText == null || STAGE_WORKER_EXECUTION.equals(stageText)) {
             latestWorkerExecutionFailureReason = reasonText;
         }
         recordFailureReason(reasonText);

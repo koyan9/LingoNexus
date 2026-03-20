@@ -18,6 +18,7 @@ package io.github.koyan9.lingonexus.testcase.nospring;
 
 import io.github.koyan9.lingonexus.api.context.ScriptContext;
 import io.github.koyan9.lingonexus.api.module.spi.ScriptModule;
+import io.github.koyan9.lingonexus.core.context.GlobalVariableManager;
 import io.github.koyan9.lingonexus.core.executor.ExecutionPreparationService;
 import io.github.koyan9.lingonexus.core.executor.PreparedExecution;
 import io.github.koyan9.lingonexus.core.impl.DefaultModuleRegistry;
@@ -74,6 +75,30 @@ class ExecutionPreparationServiceFeatureTest {
         );
 
         assertEquals("request-value", execution.getExecutionVariables().get("alpha"));
+        assertEquals(1, execution.getModulesUsed().size());
+        assertTrue(execution.getModulesUsed().contains("alpha"));
+    }
+
+    @Test
+    @DisplayName("Should reuse merged execution context variables for in-process execution with globals and modules")
+    void shouldReuseMergedExecutionContextVariablesForInProcessExecutionWithGlobalsAndModules() {
+        DefaultModuleRegistry moduleRegistry = new DefaultModuleRegistry();
+        moduleRegistry.registerModule(new TestModule("alpha"));
+
+        GlobalVariableManager variableManager = new GlobalVariableManager();
+        variableManager.setVariable("globalOnly", 7);
+        variableManager.setVariable("shared", "global-value");
+
+        ExecutionPreparationService service = new ExecutionPreparationService(variableManager, moduleRegistry);
+        ScriptContext requestContext = ScriptContext.of(Collections.<String, Object>singletonMap("shared", "request-value"));
+
+        PreparedExecution execution = service.prepareForInProcessExecution(requestContext);
+
+        assertNotSame(requestContext, execution.getExecutionContext());
+        assertSame(execution.getExecutionContext().getVariables(), execution.getExecutionVariables());
+        assertEquals("request-value", execution.getExecutionVariables().get("shared"));
+        assertEquals(7, execution.getExecutionVariables().get("globalOnly"));
+        assertTrue(execution.getExecutionVariables().containsKey("alpha"));
         assertEquals(1, execution.getModulesUsed().size());
         assertTrue(execution.getModulesUsed().contains("alpha"));
     }

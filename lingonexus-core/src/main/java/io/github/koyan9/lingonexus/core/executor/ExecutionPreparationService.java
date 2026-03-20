@@ -78,11 +78,20 @@ public class ExecutionPreparationService {
             return fastPathExecution;
         }
 
+        if (includeModules) {
+            return prepareMergedInProcessExecution(
+                    requestContext,
+                    requestVariables,
+                    globalVariables,
+                    moduleSnapshot
+            );
+        }
+
         Map<String, Object> executionVariables = new HashMap<String, Object>(
                 calculateInitialCapacity(
                         globalVariables.size(),
                         requestVariables != null ? requestVariables.size() : 0,
-                        moduleSnapshot.getBindingCount()
+                        0
                 )
         );
         if (!globalVariables.isEmpty()) {
@@ -92,14 +101,7 @@ public class ExecutionPreparationService {
             executionVariables.putAll(requestVariables);
         }
 
-        List<String> modulesUsed = includeModules
-                ? injectModules(executionVariables, moduleSnapshot)
-                : Collections.<String>emptyList();
-        ScriptContext executionContext = includeModules
-                ? ScriptContext.of(executionVariables, requestContext.getMetadata())
-                : null;
-
-        return new PreparedExecution(executionVariables, modulesUsed, executionContext);
+        return new PreparedExecution(executionVariables, Collections.<String>emptyList(), null);
     }
 
     private PreparedExecution tryPrepareFastPath(ScriptContext requestContext,
@@ -134,6 +136,46 @@ public class ExecutionPreparationService {
         }
 
         return null;
+    }
+
+    private PreparedExecution prepareMergedInProcessExecution(ScriptContext requestContext,
+                                                              Map<String, Object> requestVariables,
+                                                              Map<String, Object> globalVariables,
+                                                              ModuleSnapshot moduleSnapshot) {
+        ScriptContext executionContext = createBaseExecutionContext(requestContext, requestVariables, globalVariables);
+        Map<String, Object> executionVariables = executionContext.getVariables();
+
+        if (!globalVariables.isEmpty()
+                && requestVariables != null
+                && !requestVariables.isEmpty()) {
+            injectGlobalVariables(executionVariables, globalVariables);
+        }
+
+        List<String> modulesUsed = injectModules(executionVariables, moduleSnapshot);
+        return new PreparedExecution(executionVariables, modulesUsed, executionContext);
+    }
+
+    // Build the execution context once, then merge globals/modules into the same backing map.
+    private ScriptContext createBaseExecutionContext(ScriptContext requestContext,
+                                                     Map<String, Object> requestVariables,
+                                                     Map<String, Object> globalVariables) {
+        if (requestVariables != null && !requestVariables.isEmpty()) {
+            return ScriptContext.of(requestVariables, requestContext.getMetadata());
+        }
+        if (!globalVariables.isEmpty()) {
+            return ScriptContext.of(globalVariables, requestContext.getMetadata());
+        }
+        return ScriptContext.of(Collections.<String, Object>emptyMap(), requestContext.getMetadata());
+    }
+
+    private void injectGlobalVariables(Map<String, Object> executionVariables,
+                                       Map<String, Object> globalVariables) {
+        if (globalVariables == null || globalVariables.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : globalVariables.entrySet()) {
+            executionVariables.putIfAbsent(entry.getKey(), entry.getValue());
+        }
     }
 
     private Map<String, Object> getGlobalVariablesSnapshot() {

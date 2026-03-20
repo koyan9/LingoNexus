@@ -31,6 +31,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -147,5 +149,68 @@ class ExternalProcessIsolationTest {
         } finally {
             executor.close();
         }
+    }
+
+    @Test
+    @DisplayName("Should expose borrow timeout diagnostics when the worker pool is saturated")
+    void shouldExposeBorrowTimeoutDiagnosticsWhenWorkerPoolIsSaturated() throws Exception {
+        LingoNexusConfig config = LingoNexusConfig.builder()
+                .defaultLanguage(ScriptLanguage.GROOVY)
+                .allowedSandboxLanguage(ScriptLanguage.GROOVY)
+                .sandboxConfig(SandboxConfig.builder()
+                        .enabled(true)
+                        .timeoutMs(3000)
+                        .isolationMode(ExecutionIsolationMode.EXTERNAL_PROCESS)
+                        .externalProcessPoolSize(1)
+                        .externalProcessBorrowTimeoutMs(100L)
+                        .build())
+                .build();
+
+        LingoNexusExecutor executor = LingoNexusBuilder.createNewInstance(config);
+        try {
+            CompletableFuture<ScriptResult> blockingFuture = executor.executeAsync(
+                    "Thread.sleep(1200); return 1",
+                    "groovy",
+                    ScriptContext.of(Collections.emptyMap())
+            );
+            waitForBorrowToStart(executor, 2000L);
+
+            ScriptResult borrowTimeoutResult = executor.execute(
+                    "return 7 * 6",
+                    "groovy",
+                    ScriptContext.of(Collections.emptyMap())
+            );
+
+            assertEquals(ExecutionStatus.FAILURE, borrowTimeoutResult.getStatus());
+            assertEquals("borrow_worker", borrowTimeoutResult.getMetadata().get(ResultMetadataKeys.ERROR_STAGE));
+            assertEquals("external-worker-pool", borrowTimeoutResult.getMetadata().get(ResultMetadataKeys.ERROR_COMPONENT));
+            assertEquals("worker_borrow_timeout", borrowTimeoutResult.getMetadata().get(ResultMetadataKeys.ERROR_REASON));
+
+            ScriptResult blockingResult = blockingFuture.get(5, TimeUnit.SECONDS);
+            assertTrue(blockingResult.isSuccess());
+
+            EngineDiagnostics diagnostics = executor.getDiagnostics();
+            assertNotNull(diagnostics.getExternalProcessStatistics());
+            assertTrue(diagnostics.getExternalProcessStatistics().getBorrowTimeoutCount() >= 1);
+            assertEquals("worker_borrow_timeout", diagnostics.getExternalProcessStatistics().getLatestBorrowFailureReason());
+            assertEquals(1L, diagnostics.getExternalProcessStatistics().getFailureReasonCounts().get("worker_borrow_timeout"));
+        } finally {
+            executor.close();
+        }
+    }
+
+    private void waitForBorrowToStart(LingoNexusExecutor executor, long timeoutMs) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (System.nanoTime() < deadline) {
+            EngineDiagnostics diagnostics = executor.getDiagnostics();
+            if (diagnostics.getExternalProcessStatistics() != null
+                    && diagnostics.getExternalProcessStatistics().getBorrowCount()
+                    > diagnostics.getExternalProcessStatistics().getReturnCount()
+                    && diagnostics.getExternalProcessStatistics().getIdleWorkers() == 0) {
+                return;
+            }
+            Thread.sleep(25L);
+        }
+        throw new AssertionError("Timed out waiting for the first external worker borrow");
     }
 }

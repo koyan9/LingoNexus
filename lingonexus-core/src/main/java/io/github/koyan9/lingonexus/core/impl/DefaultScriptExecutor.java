@@ -91,6 +91,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     private final VariableManager variableManager;
     private final ScriptCacheManager cacheManager;
     private final ExecutorService executorService;
+    private final ExecutionIsolationMode configuredIsolationMode;
+    private final String configuredIsolationModeName;
+    private final ResultMetadataPlan defaultResultMetadataPlan;
     private volatile ExternalProcessRuntime externalProcessRuntime;
     private final AtomicBoolean shutdown = new AtomicBoolean(false);
     private final ExecutionPreparationService executionPreparationService;
@@ -103,6 +106,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         this.securityPolicies = config.getSecurityPolicies();
         this.variableManager = config.getVariableManager();
         this.cacheManager = cacheManager;
+        this.configuredIsolationMode = config.getSandboxConfig().getIsolationMode();
+        this.configuredIsolationModeName = configuredIsolationMode.name();
+        this.defaultResultMetadataPlan = ResultMetadataPlan.of(config.getResultMetadataCategories());
         this.externalProcessRuntime = shouldEagerInitializeExternalProcessRuntime()
                 ? createExternalProcessRuntime()
                 : null;
@@ -122,7 +128,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         ensureActive();
         long requestStartNanos = System.nanoTime();
         Map<String, Object> resultMetadata = null;
-        java.util.Set<ResultMetadataCategory> resultMetadataCategories = config.getResultMetadataCategories();
+        ResultMetadataPlan resultMetadataPlan = defaultResultMetadataPlan;
 
         try {
             logger.debug("Executing script: language={}, length={}", language, script != null ? script.length() : 0);
@@ -138,9 +144,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 return ScriptResult.failure(error);
             }
 
-            resultMetadataCategories = resolveResultMetadataCategories(context);
+            resultMetadataPlan = resolveResultMetadataPlan(context);
 
-            if (config.getSandboxConfig().getIsolationMode() == ExecutionIsolationMode.EXTERNAL_PROCESS) {
+            if (configuredIsolationMode == ExecutionIsolationMode.EXTERNAL_PROCESS) {
                 PreparedExecution preparedExecution = executionPreparationService.prepareForExternalProcess(context);
                 ScriptResult processResult = executeInExternalProcess(
                         script,
@@ -152,7 +158,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                         processResult,
                         language,
                         requestStartNanos,
-                        resultMetadataCategories
+                        resultMetadataPlan
                 );
                 statisticsCollector.record(
                         language,
@@ -165,8 +171,8 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
             resultMetadata = createInitialResultMetadata(
                     language,
-                    config.getSandboxConfig().getIsolationMode().name(),
-                    resultMetadataCategories
+                    configuredIsolationModeName,
+                    resultMetadataPlan
             );
 
             ScriptResult directResult = executeInProcess(
@@ -175,7 +181,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                     context,
                     requestStartNanos,
                     resultMetadata,
-                    resultMetadataCategories
+                    resultMetadataPlan
             );
             statisticsCollector.record(
                     language,
@@ -193,18 +199,18 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             if (resultMetadata == null) {
                 resultMetadata = createErrorResultMetadata(
                         language,
-                        resultMetadataCategories,
+                        resultMetadataPlan,
                         e,
                         false
                 );
                 requiresMetadataFiltering = e instanceof ExternalProcessCompatibilityException;
             } else {
-                requiresMetadataFiltering = populateErrorResultMetadata(resultMetadata, e, false, resultMetadataCategories);
+                requiresMetadataFiltering = populateErrorResultMetadata(resultMetadata, e, false, resultMetadataPlan);
             }
-            putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.EXECUTION_TIME, elapsedTime);
-            putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, elapsedTime);
-            if (requiresMetadataFiltering) {
-                stripResultMetadataForCategories(resultMetadata, resultMetadataCategories);
+            putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.EXECUTION_TIME, elapsedTime);
+            putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.TOTAL_TIME, elapsedTime);
+            if (requiresMetadataFiltering && resultMetadataPlan.requiresFiltering()) {
+                stripResultMetadataForCategories(resultMetadata, resultMetadataPlan);
             }
 
             ExecutionStatus status = determineExecutionStatus(e);
@@ -236,10 +242,10 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 long executionTime = 0;
                 ExecutionStatus status = determineExecutionStatus(e);
 
-                java.util.Set<ResultMetadataCategory> resultMetadataCategories = resolveResultMetadataCategories(context);
+                ResultMetadataPlan resultMetadataPlan = resolveResultMetadataPlan(context);
                 Map<String, Object> errorMetadata = createErrorResultMetadata(
                         langToUse,
-                        resultMetadataCategories,
+                        resultMetadataPlan,
                         e,
                         true
                 );
@@ -328,7 +334,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 config.getThreadPoolManager().getStatistics(ThreadPoolManager.PoolType.ASYNC_EXECUTOR),
                 config.getThreadPoolManager().getStatistics(ThreadPoolManager.PoolType.ISOLATED_EXECUTOR),
                 externalProcessStatistics,
-                config.getSandboxConfig().getIsolationMode().name(),
+                configuredIsolationModeName,
                 isShutdown()
         );
     }
@@ -405,23 +411,29 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     private ScriptResult executeInExternalProcess(String script, String language, ScriptContext context,
                                                   Map<String, Object> executionVariables) {
         ExternalProcessRuntime runtime = getOrCreateExternalProcessRuntime();
-        ExternalProcessExecutionRequest request = runtime.getRequestFactory().createRequest(
-                script,
-                language,
-                context,
-                executionVariables
-        );
+        ExternalProcessExecutionRequest request;
+        try {
+            request = runtime.getRequestFactory().createRequest(
+                    script,
+                    language,
+                    context,
+                    executionVariables
+            );
+        } catch (ExternalProcessCompatibilityException e) {
+            runtime.getExecutor().recordCompatibilityFailure(e);
+            throw e;
+        }
         return runtime.getExecutor().execute(request, config.getSandboxConfig().getTimeoutMs());
     }
 
     private ScriptResult executeInProcess(String script, String language, ScriptContext context,
                                           long requestStartNanos, Map<String, Object> resultMetadata,
-                                          java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                          ResultMetadataPlan resultMetadataPlan) {
         PreparedDirectExecution preparedDirectExecution = prepareDirectExecution(
                 language,
                 context,
                 resultMetadata,
-                resultMetadataCategories
+                resultMetadataPlan
         );
         ScriptContext executionContext = preparedDirectExecution.getExecutionContext();
         long securityValidationTime = performSecurityValidation(
@@ -429,9 +441,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 language,
                 executionContext,
                 resultMetadata,
-                resultMetadataCategories
+                resultMetadataPlan
         );
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.SECURITY_VALIDATION_TIME, securityValidationTime);
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.SECURITY_VALIDATION_TIME, securityValidationTime);
 
         CompiledExecution compiledExecution = compileInProcessScript(
                 script,
@@ -439,14 +451,14 @@ public class DefaultScriptExecutor implements ScriptExecutor {
                 preparedDirectExecution.getSandbox(),
                 executionContext
         );
-        applyCompilationMetadata(resultMetadata, compiledExecution, resultMetadataCategories);
+        applyCompilationMetadata(resultMetadata, compiledExecution, resultMetadataPlan);
 
         InProcessExecutionResult executionResult = executeCompiledScript(
                 compiledExecution.getCompiledScript(),
                 executionContext,
                 requestStartNanos,
                 resultMetadata,
-                resultMetadataCategories
+                resultMetadataPlan
         );
         logSuccessfulExecution(
                 language,
@@ -465,12 +477,12 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
     private PreparedDirectExecution prepareDirectExecution(String language, ScriptContext context,
                                                            Map<String, Object> resultMetadata,
-                                                           java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                                           ResultMetadataPlan resultMetadataPlan) {
         ScriptSandbox sandbox = sandboxManager.getSandbox(language).orElseThrow(
                 new IllegalStateExceptionSupplier("No sandbox available for language: " + language)
         );
         PreparedExecution preparedExecution = executionPreparationService.prepareForInProcessExecution(context);
-        putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.MODULE, ResultMetadataKeys.MODULES_USED, preparedExecution.getModulesUsed());
+        putModuleResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.MODULES_USED, preparedExecution.getModulesUsed());
         return new PreparedDirectExecution(sandbox, preparedExecution.getExecutionContext());
     }
 
@@ -536,15 +548,15 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private void applyCompilationMetadata(Map<String, Object> resultMetadata, CompiledExecution compiledExecution,
-                                          java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                          ResultMetadataPlan resultMetadataPlan) {
         resultMetadata.put(ResultMetadataKeys.CACHE_HIT, compiledExecution.isCacheHit());
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.COMPILE_TIME, compiledExecution.getCompileTimeMs());
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.CACHE_WAIT_TIME, compiledExecution.getCacheWaitTimeMs());
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.COMPILE_TIME, compiledExecution.getCompileTimeMs());
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.CACHE_WAIT_TIME, compiledExecution.getCacheWaitTimeMs());
     }
 
     private InProcessExecutionResult executeCompiledScript(CompiledScript compiledScript, ScriptContext executionContext,
                                                            long requestStartNanos, Map<String, Object> resultMetadata,
-                                                           java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                                           ResultMetadataPlan resultMetadataPlan) {
         long executeWallStartNanos = System.nanoTime();
         Object value = compiledScript.execute(executionContext);
         long executeWallTime = nanosToMillis(System.nanoTime() - executeWallStartNanos);
@@ -554,10 +566,10 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         long wallTime = getLongMetadata(executionContext, ResultMetadataKeys.WALL_TIME, executeWallTime);
         long totalTime = nanosToMillis(System.nanoTime() - requestStartNanos);
 
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.EXECUTION_TIME, executeTime);
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.QUEUE_WAIT_TIME, queueWaitTime);
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.WALL_TIME, wallTime);
-        putTimingResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, totalTime);
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.EXECUTION_TIME, executeTime);
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.QUEUE_WAIT_TIME, queueWaitTime);
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.WALL_TIME, wallTime);
+        putTimingResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.TOTAL_TIME, totalTime);
         return new InProcessExecutionResult(value, executeTime, queueWaitTime, wallTime, totalTime);
     }
 
@@ -620,7 +632,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private boolean shouldEagerInitializeExternalProcessRuntime() {
-        return config.getSandboxConfig().getIsolationMode() == ExecutionIsolationMode.EXTERNAL_PROCESS;
+        return configuredIsolationMode == ExecutionIsolationMode.EXTERNAL_PROCESS;
     }
 
     private ExternalProcessRuntime getOrCreateExternalProcessRuntime() {
@@ -662,18 +674,18 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
     private ScriptResult finalizeExternalProcessResult(ScriptResult processResult, String language,
                                                        long requestStartNanos,
-                                                       java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                                       ResultMetadataPlan resultMetadataPlan) {
         Map<String, Object> processMetadata = processResult.getMetadata();
         Map<String, Object> externalMetadata = processMetadata != null
                 ? processMetadata
                 : new HashMap<String, Object>(resolveMergedResultMetadataCapacity(null, null));
         externalMetadata.putIfAbsent(ResultMetadataKeys.SCRIPT_ENGINE, language);
         externalMetadata.put(ResultMetadataKeys.ISOLATION_MODE, ExecutionIsolationMode.EXTERNAL_PROCESS.name());
-        putThreadResultMetadata(externalMetadata, resultMetadataCategories);
+        putThreadResultMetadata(externalMetadata, resultMetadataPlan);
 
         long totalTime = nanosToMillis(System.nanoTime() - requestStartNanos);
-        putTimingResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataKeys.TOTAL_TIME, totalTime);
-        putTimingResultMetadata(externalMetadata, resultMetadataCategories, ResultMetadataKeys.WALL_TIME, totalTime);
+        putTimingResultMetadata(externalMetadata, resultMetadataPlan, ResultMetadataKeys.TOTAL_TIME, totalTime);
+        putTimingResultMetadata(externalMetadata, resultMetadataPlan, ResultMetadataKeys.WALL_TIME, totalTime);
 
         if (processResult.isSuccess()) {
             logSuccessfulExecution(
@@ -693,7 +705,9 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
         externalMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, processResult.getErrorMessage());
         externalMetadata.putIfAbsent(ResultMetadataKeys.ERROR_TYPE, processResult.getStatus().name());
-        stripResultMetadataForCategories(externalMetadata, resultMetadataCategories);
+        if (resultMetadataPlan.requiresFiltering()) {
+            stripResultMetadataForCategories(externalMetadata, resultMetadataPlan);
+        }
         return ScriptResult.of(
                 processResult.getStatus(),
                 null,
@@ -745,7 +759,7 @@ public class DefaultScriptExecutor implements ScriptExecutor {
      */
     private long performSecurityValidation(String script, String language, ScriptContext context,
                                           Map<String, Object> resultMetadata,
-                                          java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                          ResultMetadataPlan resultMetadataPlan) {
         if (!config.getSandboxConfig().isEnabled() || securityPolicies == null || securityPolicies.isEmpty()) {
             return 0L;
         }
@@ -762,35 +776,34 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             securityChecksPassed++;
         }
         logger.debug("All security policies passed");
-        putDiagnosticResultMetadata(resultMetadata, resultMetadataCategories, ResultMetadataCategory.SECURITY, ResultMetadataKeys.SECURITY_CHECKS, securityChecksPassed);
+        putSecurityResultMetadata(resultMetadata, resultMetadataPlan, ResultMetadataKeys.SECURITY_CHECKS, securityChecksPassed);
         return nanosToMillis(System.nanoTime() - validationStartNanos);
     }
 
     private Map<String, Object> createErrorResultMetadata(String language,
-                                                          java.util.Set<ResultMetadataCategory> resultMetadataCategories,
+                                                          ResultMetadataPlan resultMetadataPlan,
                                                           Exception exception,
                                                           boolean async) {
         Map<String, Object> errorMetadata = createInitialResultMetadata(
                 language,
-                config.getSandboxConfig().getIsolationMode().name(),
-                resultMetadataCategories
+                configuredIsolationModeName,
+                resultMetadataPlan
         );
-        populateErrorResultMetadata(errorMetadata, exception, async, resultMetadataCategories);
+        populateErrorResultMetadata(errorMetadata, exception, async, resultMetadataPlan);
         return errorMetadata;
     }
 
     private boolean populateErrorResultMetadata(Map<String, Object> resultMetadata,
                                                 Exception exception,
                                                 boolean async,
-                                                java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
+                                                ResultMetadataPlan resultMetadataPlan) {
         resultMetadata.put(ResultMetadataKeys.ERROR_TYPE, exception.getClass().getSimpleName());
         resultMetadata.put(ResultMetadataKeys.ERROR_MESSAGE, exception.getMessage());
         if (async) {
             resultMetadata.put("async", true);
         }
         if (exception instanceof ExternalProcessCompatibilityException) {
-            if (resultMetadataCategories != null
-                    && resultMetadataCategories.contains(ResultMetadataCategory.ERROR_DIAGNOSTICS)) {
+            if (resultMetadataPlan.isErrorDiagnosticsEnabled()) {
                 populateExternalProcessCompatibilityMetadata(
                         resultMetadata,
                         (ExternalProcessCompatibilityException) exception
@@ -802,12 +815,20 @@ public class DefaultScriptExecutor implements ScriptExecutor {
     }
 
     private Map<String, Object> createInitialResultMetadata(String language, String isolationMode,
-                                                            java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        Map<String, Object> resultMetadata = new HashMap<String, Object>(resolveInitialResultMetadataCapacity(resultMetadataCategories));
+                                                            ResultMetadataPlan resultMetadataPlan) {
+        Map<String, Object> resultMetadata = new HashMap<String, Object>(resultMetadataPlan.getInitialMetadataCapacity());
         resultMetadata.put(ResultMetadataKeys.SCRIPT_ENGINE, language);
         resultMetadata.put(ResultMetadataKeys.ISOLATION_MODE, isolationMode);
-        putThreadResultMetadata(resultMetadata, resultMetadataCategories);
+        putThreadResultMetadata(resultMetadata, resultMetadataPlan);
         return resultMetadata;
+    }
+
+    private ResultMetadataPlan resolveResultMetadataPlan(ScriptContext context) {
+        Map<String, Object> contextMetadata = context != null ? context.getMetadata() : null;
+        if (contextMetadata == null || contextMetadata.isEmpty()) {
+            return defaultResultMetadataPlan;
+        }
+        return ResultMetadataPlan.of(resolveResultMetadataCategories(context));
     }
 
     private java.util.Set<ResultMetadataCategory> resolveResultMetadataCategories(ScriptContext context) {
@@ -872,13 +893,22 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             return categories;
         }
         if (override instanceof java.util.Collection) {
+            boolean hasValues = false;
+            boolean hasInvalid = false;
             for (Object item : (java.util.Collection<?>) override) {
                 if (item == null) {
                     continue;
                 }
-                categories.add(item instanceof ResultMetadataCategory
-                        ? (ResultMetadataCategory) item
-                        : ResultMetadataCategory.valueOf(String.valueOf(item).trim().toUpperCase()));
+                hasValues = true;
+                ResultMetadataCategory parsedCategory = parseResultMetadataCategory(item);
+                if (parsedCategory != null) {
+                    categories.add(parsedCategory);
+                } else {
+                    hasInvalid = true;
+                }
+            }
+            if (categories.isEmpty() && hasValues && hasInvalid) {
+                return null;
             }
             return categories;
         }
@@ -887,18 +917,48 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             return categories;
         }
         String[] parts = text.split(",");
+        boolean hasValues = false;
+        boolean hasInvalid = false;
         for (String part : parts) {
             String candidate = part != null ? part.trim() : "";
             if (!candidate.isEmpty()) {
-                categories.add(ResultMetadataCategory.valueOf(candidate.toUpperCase()));
+                hasValues = true;
+                ResultMetadataCategory parsedCategory = parseResultMetadataCategory(candidate);
+                if (parsedCategory != null) {
+                    categories.add(parsedCategory);
+                } else {
+                    hasInvalid = true;
+                }
             }
+        }
+        if (categories.isEmpty() && hasValues && hasInvalid) {
+            return null;
         }
         return categories;
     }
 
+    private ResultMetadataCategory parseResultMetadataCategory(Object candidate) {
+        if (candidate == null) {
+            return null;
+        }
+        if (candidate instanceof ResultMetadataCategory) {
+            return (ResultMetadataCategory) candidate;
+        }
+        String text = String.valueOf(candidate).trim();
+        if (text.isEmpty()) {
+            return null;
+        }
+        try {
+            return ResultMetadataCategory.valueOf(text.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            logger.warn("Unknown result metadata category override: {}", text);
+            return null;
+        }
+    }
+
     private void putThreadResultMetadata(Map<String, Object> resultMetadata,
-                                         java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        if (resultMetadataCategories == null || !resultMetadataCategories.contains(ResultMetadataCategory.THREAD)) {
+                                         ResultMetadataPlan resultMetadataPlan) {
+        if (!resultMetadataPlan.isThreadEnabled()) {
             return;
         }
         Thread currentThread = Thread.currentThread();
@@ -906,38 +966,25 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         resultMetadata.put(ResultMetadataKeys.THREAD_NAME, currentThread.getName());
     }
 
-    private void putTimingResultMetadata(Map<String, Object> resultMetadata, java.util.Set<ResultMetadataCategory> resultMetadataCategories,
+    private void putTimingResultMetadata(Map<String, Object> resultMetadata, ResultMetadataPlan resultMetadataPlan,
                                          String key, Object value) {
-        if (resultMetadataCategories.contains(ResultMetadataCategory.TIMING)) {
+        if (resultMetadataPlan.isTimingEnabled()) {
             resultMetadata.put(key, value);
         }
     }
 
-    private void putDiagnosticResultMetadata(Map<String, Object> resultMetadata, java.util.Set<ResultMetadataCategory> resultMetadataCategories,
-                                             ResultMetadataCategory category, String key, Object value) {
-        if (resultMetadataCategories.contains(category)) {
+    private void putModuleResultMetadata(Map<String, Object> resultMetadata, ResultMetadataPlan resultMetadataPlan,
+                                         String key, Object value) {
+        if (resultMetadataPlan.isModuleEnabled()) {
             resultMetadata.put(key, value);
         }
     }
 
-    private int resolveInitialResultMetadataCapacity(java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        int expectedEntries = 3; // scriptEngine, isolationMode, cacheHit
-        if (resultMetadataCategories != null) {
-            if (resultMetadataCategories.contains(ResultMetadataCategory.TIMING)) {
-                expectedEntries += 7; // compile, cacheWait, securityValidation, execution, queueWait, wall, total
-            }
-            if (resultMetadataCategories.contains(ResultMetadataCategory.THREAD)) {
-                expectedEntries += 2;
-            }
-            if (resultMetadataCategories.contains(ResultMetadataCategory.MODULE)) {
-                expectedEntries += 1;
-            }
-            if (resultMetadataCategories.contains(ResultMetadataCategory.SECURITY)) {
-                expectedEntries += 1;
-            }
+    private void putSecurityResultMetadata(Map<String, Object> resultMetadata, ResultMetadataPlan resultMetadataPlan,
+                                           String key, Object value) {
+        if (resultMetadataPlan.isSecurityEnabled()) {
+            resultMetadata.put(key, value);
         }
-        int capacity = (int) ((expectedEntries / 0.75f) + 1.0f);
-        return Math.max(4, capacity);
     }
 
     private int resolveMergedResultMetadataCapacity(Map<String, Object> baseMetadata,
@@ -951,8 +998,8 @@ public class DefaultScriptExecutor implements ScriptExecutor {
         return (int) ((expectedSize / 0.75f) + 1.0f);
     }
 
-    private void stripResultMetadataForCategories(Map<String, Object> metadata, java.util.Set<ResultMetadataCategory> resultMetadataCategories) {
-        if (!resultMetadataCategories.contains(ResultMetadataCategory.TIMING)) {
+    private void stripResultMetadataForCategories(Map<String, Object> metadata, ResultMetadataPlan resultMetadataPlan) {
+        if (!resultMetadataPlan.isTimingEnabled()) {
             metadata.remove(ResultMetadataKeys.COMPILE_TIME);
             metadata.remove(ResultMetadataKeys.EXECUTION_TIME);
             metadata.remove(ResultMetadataKeys.QUEUE_WAIT_TIME);
@@ -961,17 +1008,17 @@ public class DefaultScriptExecutor implements ScriptExecutor {
             metadata.remove(ResultMetadataKeys.TOTAL_TIME);
             metadata.remove(ResultMetadataKeys.WALL_TIME);
         }
-        if (!resultMetadataCategories.contains(ResultMetadataCategory.MODULE)) {
+        if (!resultMetadataPlan.isModuleEnabled()) {
             metadata.remove(ResultMetadataKeys.MODULES_USED);
         }
-        if (!resultMetadataCategories.contains(ResultMetadataCategory.SECURITY)) {
+        if (!resultMetadataPlan.isSecurityEnabled()) {
             metadata.remove(ResultMetadataKeys.SECURITY_CHECKS);
         }
-        if (!resultMetadataCategories.contains(ResultMetadataCategory.THREAD)) {
+        if (!resultMetadataPlan.isThreadEnabled()) {
             metadata.remove(ResultMetadataKeys.THREAD_ID);
             metadata.remove(ResultMetadataKeys.THREAD_NAME);
         }
-        if (!resultMetadataCategories.contains(ResultMetadataCategory.ERROR_DIAGNOSTICS)) {
+        if (!resultMetadataPlan.isErrorDiagnosticsEnabled()) {
             metadata.remove(ResultMetadataKeys.ERROR_STAGE);
             metadata.remove(ResultMetadataKeys.ERROR_COMPONENT);
             metadata.remove(ResultMetadataKeys.ERROR_REASON);
@@ -1058,6 +1105,84 @@ public class DefaultScriptExecutor implements ScriptExecutor {
 
         private ExternalProcessExecutionRequestFactory getRequestFactory() {
             return requestFactory;
+        }
+    }
+
+    private static final class ResultMetadataPlan {
+        private final java.util.Set<ResultMetadataCategory> categories;
+        private final boolean timingEnabled;
+        private final boolean threadEnabled;
+        private final boolean moduleEnabled;
+        private final boolean securityEnabled;
+        private final boolean errorDiagnosticsEnabled;
+        private final int initialMetadataCapacity;
+        private final boolean requiresFiltering;
+
+        private ResultMetadataPlan(java.util.Set<ResultMetadataCategory> categories) {
+            this.categories = categories != null
+                    ? categories
+                    : Collections.<ResultMetadataCategory>emptySet();
+            this.timingEnabled = this.categories.contains(ResultMetadataCategory.TIMING);
+            this.threadEnabled = this.categories.contains(ResultMetadataCategory.THREAD);
+            this.moduleEnabled = this.categories.contains(ResultMetadataCategory.MODULE);
+            this.securityEnabled = this.categories.contains(ResultMetadataCategory.SECURITY);
+            this.errorDiagnosticsEnabled = this.categories.contains(ResultMetadataCategory.ERROR_DIAGNOSTICS);
+            this.initialMetadataCapacity = calculateInitialMetadataCapacity();
+            this.requiresFiltering = !timingEnabled
+                    || !threadEnabled
+                    || !moduleEnabled
+                    || !securityEnabled
+                    || !errorDiagnosticsEnabled;
+        }
+
+        private static ResultMetadataPlan of(java.util.Set<ResultMetadataCategory> categories) {
+            return new ResultMetadataPlan(categories);
+        }
+
+        private boolean isTimingEnabled() {
+            return timingEnabled;
+        }
+
+        private boolean isThreadEnabled() {
+            return threadEnabled;
+        }
+
+        private boolean isModuleEnabled() {
+            return moduleEnabled;
+        }
+
+        private boolean isSecurityEnabled() {
+            return securityEnabled;
+        }
+
+        private boolean isErrorDiagnosticsEnabled() {
+            return errorDiagnosticsEnabled;
+        }
+
+        private int getInitialMetadataCapacity() {
+            return initialMetadataCapacity;
+        }
+
+        private boolean requiresFiltering() {
+            return requiresFiltering;
+        }
+
+        private int calculateInitialMetadataCapacity() {
+            int expectedEntries = 3; // scriptEngine, isolationMode, cacheHit
+            if (timingEnabled) {
+                expectedEntries += 7;
+            }
+            if (threadEnabled) {
+                expectedEntries += 2;
+            }
+            if (moduleEnabled) {
+                expectedEntries += 1;
+            }
+            if (securityEnabled) {
+                expectedEntries += 1;
+            }
+            int capacity = (int) ((expectedEntries / 0.75f) + 1.0f);
+            return Math.max(4, capacity);
         }
     }
 
