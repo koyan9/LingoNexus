@@ -2,6 +2,8 @@
 
 > Status: draft release/update summary for the current stabilization and hardening wave.
 
+> GitHub release draft: `.github/release-drafts/release-2026-03-20.md`
+
 ## Highlights
 
 - Hardened `EXTERNAL_PROCESS` failure classification so request-side, negotiation-side, borrow-side, and worker-side failures remain distinguishable through stable structured metadata.
